@@ -71,7 +71,21 @@ Install ROS2 Humble, then the two **external** vendor drivers:
 ROS2 build deps (from apt): `ros-humble-pcl-conversions`, `ros-humble-pcl-ros`,
 `ros-humble-tf2-ros`, `libpcl-dev`, `libeigen3-dev`.
 
-## Build
+## Quick start on a fresh mini PC (one command)
+
+If you're starting from a clean Ubuntu 22.04 install, the setup script installs
+ROS2 Humble + all dependencies, downloads this project and builds it:
+
+```bash
+wget https://raw.githubusercontent.com/anirudhatalmale6-alt/livox_high_precision_mapping_ros2/main/scripts/setup_minipc.sh
+bash setup_minipc.sh
+```
+
+Run it as your normal user (not `sudo`); it will ask for your password when it
+needs it. When it finishes, follow the "NEXT STEPS" it prints. It is safe to
+re-run. See `scripts/setup_minipc.sh` for exactly what it does.
+
+## Build (manual)
 
 ```bash
 cd ws
