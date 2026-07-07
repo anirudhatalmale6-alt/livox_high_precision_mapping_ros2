@@ -1,0 +1,29 @@
+# Central parameters for the high-precision mapping pipeline.
+# Override per-node from the launch files or with --ros-args -p.
+
+um982_driver:
+  ros__parameters:
+    port: "/dev/ttyUSB0"
+    baud: 230400
+    frame_id: "gnss"
+    publish_heading: true
+
+imu_gnss_adapter:
+  ros__parameters:
+    input_imu_topic: "/imu/data"   # topic published by the Hiwonder IM10A driver
+    use_gnss_heading: true         # use UM982 dual-antenna yaw (recommended)
+    gnss_heading_topic: "/um982_driver/heading"
+    heading_offset_deg: 0.0        # antenna-baseline vs IMU x-axis yaw offset
+    output_frame_id: "imu"
+
+livox_mapping:
+  ros__parameters:
+    lidar_delta_time: 0.01         # 100 Hz Mid-40 frame period; adjust per sensor
+    save_pcd: true
+    map_file_path: ""              # directory for all_points.pcd (empty = cwd)
+    # rtk2lidar: row-major 4x4 extrinsic (GNSS/IMU body -> LiDAR). Calibrate for
+    # your rig; default matches the original reference mounting.
+    rtk2lidar: [-1.0, 0.0, 0.0, 0.0,
+                 0.0, -1.0, 0.0, 0.0,
+                 0.0, 0.0, 1.0, 0.0,
+                 0.0, 0.0, 0.0, 1.0]

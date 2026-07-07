@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>livox_hp_mapping_bringup</name>
+  <version>1.0.0</version>
+  <description>Launch files that bring up the full Livox + UM982 + IM10A high precision mapping pipeline on ROS2 Humble.</description>
+  <maintainer email="dev@example.com">Anirudha Talmale</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>um982_driver</exec_depend>
+  <exec_depend>imu_gnss_adapter</exec_depend>
+  <exec_depend>livox_mapping</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

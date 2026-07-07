@@ -1,0 +1,6 @@
+um982_driver:
+  ros__parameters:
+    port: "/dev/ttyUSB0"      # serial device the UM982 enumerates as
+    baud: 230400              # UM982 factory default
+    frame_id: "gnss"
+    publish_heading: true     # requires dual-antenna heading logs enabled
