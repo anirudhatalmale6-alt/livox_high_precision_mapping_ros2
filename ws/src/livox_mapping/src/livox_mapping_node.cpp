@@ -323,10 +323,6 @@ private:
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr colour(new pcl::PointCloud<pcl::PointXYZRGB>());
 
     Eigen::Matrix4d trans = Eigen::Matrix4d::Identity();
-    bool have_ref = false;
-    Eigen::Matrix4d T1 = Eigen::Matrix4d::Identity();
-    double p0[3] = {0, 0, 0};
-    double lla0[3] = {0, 0, 0};
 
     for (size_t i = 0; i < laserCloudIn.points.size(); ++i)
     {
@@ -369,41 +365,45 @@ private:
       lla[2] = rtk_datas_[num_rtk - 1].altitude * (1 - frac) +
                rtk_datas_[num_rtk].altitude * frac;
 
-      if (!have_ref)
+      // Global one-time reference: the very first processed point anchors the
+      // whole map. This mirrors the original code's function-static LLA0/p0/T1,
+      // and is what places every subsequent frame into a single consistent
+      // world frame (rather than collapsing each frame onto its own origin).
+      if (!global_ref_set_)
       {
-        lla0[0] = lla[0];
-        lla0[1] = lla[1];
-        lla0[2] = lla[2];
+        lla0_[0] = lla[0];
+        lla0_[1] = lla[1];
+        lla0_[2] = lla[2];
       }
 
-      if (!mercatorProj(lla0[1] * kDeg2Rad, lla0[0] * kDeg2Rad,
+      if (!mercatorProj(lla0_[1] * kDeg2Rad, lla0_[0] * kDeg2Rad,
                         lla[1] * kDeg2Rad, lla[0] * kDeg2Rad, p[0], p[1]))
       {
         continue;
       }
       p[2] = lla[2];
 
-      if (!have_ref)
+      if (!global_ref_set_)
       {
-        p0[0] = p[0];
-        p0[1] = p[1];
-        p0[2] = p[2];
+        p0_[0] = p[0];
+        p0_[1] = p[1];
+        p0_[2] = p[2];
       }
-      p[0] = p[0] - p0[0];
-      p[1] = p[1] - p0[1];
-      p[2] = p0[2] - p[2];
+      p[0] = p[0] - p0_[0];
+      p[1] = p[1] - p0_[1];
+      p[2] = p0_[2] - p[2];
 
       Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
       T.block<3, 3>(0, 0) = rot;
       T.block<3, 1>(0, 3) = Eigen::Vector3d(p[0], p[1], p[2]);
 
-      if (!have_ref)
+      if (!global_ref_set_)
       {
-        T1 = T;
-        have_ref = true;
+        T1_ = T;
+        global_ref_set_ = true;
       }
 
-      trans = rtk2lidar_ * T1.inverse() * T * rtk2lidar_.inverse();
+      trans = rtk2lidar_ * T1_.inverse() * T * rtk2lidar_.inverse();
 
       Eigen::Vector4d or_point(laserCloudIn.points[i].x, laserCloudIn.points[i].y,
                                laserCloudIn.points[i].z, 1.0);
@@ -474,6 +474,12 @@ private:
   size_t num_lidar_ = 0, num_imu_ = 1, num_rtk_ = 1;
   size_t num_lidar_last_ = 0, num_imu_last_ = 1, num_rtk_last_ = 1;
   bool init_flag_ = false;
+
+  // Global map anchor (first processed point); persists across all frames.
+  bool global_ref_set_ = false;
+  Eigen::Matrix4d T1_ = Eigen::Matrix4d::Identity();
+  double p0_[3] = {0, 0, 0};
+  double lla0_[3] = {0, 0, 0};
 
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr accumulated_;
 
