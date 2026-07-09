@@ -104,8 +104,11 @@ fi
 
 # ---- build our packages (self-contained; no vendor drivers needed) ----------
 step "Building the mapping workspace"
+# ROS2's own setup.bash references unset vars, so relax `set -u` while sourcing.
+set +u
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
+set -u
 cd "$WS_DIR" || die "workspace dir not found: $WS_DIR"
 colcon build --symlink-install || die "colcon build failed — send me the output above"
 ok "Workspace built successfully"
