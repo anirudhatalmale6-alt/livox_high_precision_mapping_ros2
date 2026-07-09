@@ -131,9 +131,3 @@ TEST(WitmotionParser, ResyncsAfterGarbage)
   EXPECT_EQ(emits, 1);
   EXPECT_NEAR(last.az, 9.84, 0.05);
 }
-
-int main(int argc, char ** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
