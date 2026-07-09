@@ -37,9 +37,9 @@ magnetometer cannot provide reliably.
 ```
  livox_ros_driver2 ──/livox/lidar (PointCloud2)──┐
                                                   │
- Hiwonder IM10A driver ──/imu/data──► imu_gnss_adapter ──/gnss_inertial/imu──┤
-                                          ▲                                   │
- um982_driver ──/um982_driver/heading────┘                                   ▼
+ im10a_driver ──/imu/data──► imu_gnss_adapter ──/gnss_inertial/imu──┤
+                                 ▲                                   │
+ um982_driver ──/um982_driver/heading───┘                           ▼
      └────────────────/gnss_inertial/navsatfix (NavSatFix)──────────► livox_mapping
                                                                           │
                                               /pub_pointcloud2 (georeferenced cloud)
@@ -53,20 +53,22 @@ magnetometer cannot provide reliably.
 | --------------------------- | ----------------------------------------------------------- |
 | `livox_mapping`             | The ported mapping node (core algorithm).                   |
 | `um982_driver`              | UM982 RTK serial driver (NMEA GGA + heading). Unit-tested.  |
+| `im10a_driver`              | IM10A IMU serial driver (WitMotion 0x55 → Imu). Unit-tested.|
 | `imu_gnss_adapter`          | IM10A → `/gnss_inertial/imu`, optional GNSS-yaw fusion.     |
 | `livox_mapping_interfaces`  | `CustomMsg`/`CustomPoint` messages (ROS2).                  |
 | `livox_hp_mapping_bringup`  | Full-pipeline launch files + central params.               |
 
 ## Dependencies
 
-Install ROS2 Humble, then the two **external** vendor drivers:
+Install ROS2 Humble, then the one **external** vendor driver:
 
 - **Livox** — [`livox_ros_driver2`](https://github.com/Livox-SDK/livox_ros_driver2)
   (ROS2 driver for Mid-40/Mid-70/Avia/etc). Build it into the same workspace.
-- **Hiwonder IM10A** — the vendor's ROS2 driver (from the IM10A documentation,
-  section *3.2 ROS2 Application Routine*). It publishes `sensor_msgs/Imu`
-  (default `/imu/data`). If your driver uses another topic name, set
-  `imu_input_topic` accordingly.
+
+The **IM10A does not need any vendor driver** — this workspace ships its own
+`im10a_driver` that reads the IM10A directly (WitMotion 0x55 protocol, 115200
+baud) and publishes `sensor_msgs/Imu` on `/imu/data`. It is validated with
+gtest against real captured device bytes.
 
 ROS2 build deps (from apt): `ros-humble-pcl-conversions`, `ros-humble-pcl-ros`,
 `ros-humble-tf2-ros`, `libpcl-dev`, `libeigen3-dev`.
@@ -99,13 +101,24 @@ source install/setup.bash
 ```bash
 ros2 launch livox_hp_mapping_bringup mapping_online.launch.py \
     um982_port:=/dev/ttyUSB0 um982_baud:=230400 \
-    imu_input_topic:=/imu/data use_gnss_heading:=true
+    im10a_port:=/dev/ttyUSB1 im10a_baud:=115200 \
+    use_gnss_heading:=true
 ```
 
-This starts the UM982 driver, the IMU adapter and the mapping node (plus RViz).
-Start the Livox and IM10A vendor drivers yourself (or add them to the bringup).
+This starts the IM10A driver, the UM982 driver, the IMU adapter and the mapping
+node (plus RViz). Only the Livox Mid-40 driver is started separately (or add it
+to the bringup). Set `start_im10a:=false` if you want to feed the IMU from a
+different source already publishing on `imu_input_topic`.
+
 The accumulated cloud is published on `/pub_pointcloud2` and written to
 `all_points.pcd` on shutdown (`map_file_path:=/path` to choose the directory).
+
+To run just the IMU driver on its own (handy for a first smoke test):
+
+```bash
+ros2 launch im10a_driver im10a.launch.py           # or set port/baud in config
+ros2 topic echo /imu/data                          # watch live IMU data
+```
 
 ## Run — offline (rosbag)
 

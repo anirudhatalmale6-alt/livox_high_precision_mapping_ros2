@@ -1,10 +1,10 @@
-// imu_gnss_adapter — bridges the Hiwonder IM10A IMU into the mapping pipeline.
+// imu_gnss_adapter — bridges the IM10A IMU into the mapping pipeline.
 //
-// The IM10A ships with an official Hiwonder ROS2 driver that publishes a
-// standard sensor_msgs/Imu (default topic "/imu/data"). Rather than reimplement
-// the vendor's serial protocol, this adapter subscribes to that topic and
-// republishes it as "/gnss_inertial/imu" — the exact contract the mapping node
-// expects (previously produced by the APX-15 driver).
+// The IM10A is read by this workspace's own `im10a_driver`, which publishes a
+// standard sensor_msgs/Imu (default topic "/imu/data"). This adapter subscribes
+// to that topic and republishes it as "/gnss_inertial/imu" — the exact contract
+// the mapping node expects (previously produced by the APX-15 driver). Keeping
+// the adapter separate means any IMU source publishing on "/imu/data" works.
 //
 // It also optionally replaces the IMU's yaw with the UM982's dual-antenna GNSS
 // heading, which is drift-free and absolute (unlike a MEMS magnetometer yaw).

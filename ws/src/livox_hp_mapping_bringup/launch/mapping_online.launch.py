@@ -2,14 +2,14 @@
 #
 # Starts the whole pipeline:
 #   1. Livox Mid-40 driver  (livox_ros_driver2 - installed separately)
-#   2. Hiwonder IM10A driver (vendor package - installed separately)
+#   2. IM10A IMU driver      (this workspace - native, no vendor driver needed)
 #   3. UM982 RTK driver      (this workspace)
 #   4. IM10A -> /gnss_inertial/imu adapter (this workspace)
 #   5. livox_mapping node    (this workspace)
 #
-# The two vendor drivers (Livox + Hiwonder) are external packages. Set the
-# launch arguments below to point at them, or launch them yourself and set
-# start_livox / start_imu to false.
+# The Livox driver is the only external package. The IM10A is handled by our own
+# im10a_driver (publishes /imu/data); set start_im10a:=false if you would rather
+# run a different IMU source that already publishes on imu_input_topic.
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -29,12 +29,29 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument('um982_port', default_value='/dev/ttyUSB0'),
         DeclareLaunchArgument('um982_baud', default_value='230400'),
+        DeclareLaunchArgument('im10a_port', default_value='/dev/ttyUSB1'),
+        DeclareLaunchArgument('im10a_baud', default_value='115200'),
+        DeclareLaunchArgument('start_im10a', default_value='true'),
         DeclareLaunchArgument('imu_input_topic', default_value='/imu/data'),
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
         DeclareLaunchArgument('heading_offset_deg', default_value='0.0'),
         DeclareLaunchArgument('map_file_path', default_value=''),
         DeclareLaunchArgument('rviz', default_value='true'),
     ]
+
+    im10a = Node(
+        package='im10a_driver',
+        executable='im10a_driver_node',
+        name='im10a_driver',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('start_im10a')),
+        parameters=[{
+            'port': LaunchConfiguration('im10a_port'),
+            'baud': LaunchConfiguration('im10a_baud'),
+            'frame_id': 'imu',
+            'imu_topic': LaunchConfiguration('imu_input_topic'),
+        }],
+    )
 
     um982 = Node(
         package='um982_driver',
@@ -72,4 +89,4 @@ def generate_launch_description():
         }.items(),
     )
 
-    return LaunchDescription(args + [um982, imu_adapter, mapping])
+    return LaunchDescription(args + [im10a, um982, imu_adapter, mapping])

@@ -1,0 +1,9 @@
+im10a_driver:
+  ros__parameters:
+    port: "/dev/ttyUSB0"      # serial device the IM10A enumerates as (CH340)
+    baud: 115200              # confirmed IM10A output rate
+    frame_id: "imu"
+    imu_topic: "/imu/data"    # drop-in for the vendor driver; adapter reads this
+    orientation_stddev: 0.02          # rad
+    angular_velocity_stddev: 0.01     # rad/s
+    linear_acceleration_stddev: 0.1   # m/s^2
