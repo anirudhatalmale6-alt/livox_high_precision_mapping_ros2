@@ -141,8 +141,10 @@ fi
 # livox_ros2_driver builds as part of the normal colcon build below; re-run it so
 # the driver is available immediately.
 if [ "$LIVOX_OK" = "1" ] && [ -d "$WS_DIR/src/livox_ros2_driver" ]; then
+  # up-to (not select): the repo bundles livox_interfaces + livox_sdk_vendor, and
+  # livox_ros2_driver depends on both — they must be built first.
   ( set +u; cd "$WS_DIR" && source /opt/ros/humble/setup.bash \
-    && colcon build --symlink-install --packages-select livox_ros2_driver ) || LIVOX_OK=0
+    && colcon build --symlink-install --packages-up-to livox_ros2_driver ) || LIVOX_OK=0
 fi
 if [ "$LIVOX_OK" = "1" ]; then
   ok "Livox Avia driver installed (configure the broadcast code — see docs/lidar_avia.md)"
