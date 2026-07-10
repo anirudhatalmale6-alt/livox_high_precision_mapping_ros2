@@ -42,8 +42,13 @@ The one-shot `scripts/setup_minipc.sh` does this automatically. To do it by hand
 # Livox-SDK (v1)
 cd ~
 git clone https://github.com/Livox-SDK/Livox-SDK.git
+# GCC 11 (Ubuntu 22.04) fix: the 2019 SDK uses std::shared_ptr without including
+# <memory>. Without this one line the build fails with
+# "'shared_ptr' in namespace 'std' does not name a type". Add the missing include:
+sed -i '/#include "noncopyable.h"/a #include <memory>' \
+    ~/Livox-SDK/sdk_core/src/base/thread_base.h
 mkdir -p ~/Livox-SDK/build && cd ~/Livox-SDK/build
-cmake .. && make -j"$(nproc)" && sudo make install
+cmake .. && make -j"$(nproc)" && sudo make install && sudo ldconfig
 
 # livox_ros2_driver, into this workspace
 cd ~/livox_high_precision_mapping_ros2/ws/src

@@ -122,6 +122,14 @@ LIVOX_OK=1
 if [ ! -d "$HOME/Livox-SDK" ]; then
   git clone https://github.com/Livox-SDK/Livox-SDK.git "$HOME/Livox-SDK" || LIVOX_OK=0
 fi
+# GCC 11 (Ubuntu 22.04) fix: the 2019-era SDK uses std::shared_ptr without
+# including <memory>, which older compilers pulled in transitively. Add it so the
+# build does not fail with "'shared_ptr' in namespace 'std' does not name a type".
+if [ "$LIVOX_OK" = "1" ] && [ -f "$HOME/Livox-SDK/sdk_core/src/base/thread_base.h" ]; then
+  grep -q '#include <memory>' "$HOME/Livox-SDK/sdk_core/src/base/thread_base.h" \
+    || sed -i '/#include "noncopyable.h"/a #include <memory>' \
+         "$HOME/Livox-SDK/sdk_core/src/base/thread_base.h"
+fi
 if [ "$LIVOX_OK" = "1" ] && [ -d "$HOME/Livox-SDK" ]; then
   ( mkdir -p "$HOME/Livox-SDK/build" && cd "$HOME/Livox-SDK/build" \
     && cmake .. && make -j"$(nproc)" && sudo make install ) || LIVOX_OK=0
