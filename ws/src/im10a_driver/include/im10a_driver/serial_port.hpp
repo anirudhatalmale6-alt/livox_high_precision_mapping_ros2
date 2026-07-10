@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -86,7 +87,7 @@ public:
 
   // Read up to `n` bytes into `buf`. Returns the number read (0 on timeout,
   // negative on error).
-  ssize_t readBytes(uint8_t * buf, size_t n)
+  ssize_t readBytes(uint8_t * buf, std::size_t n)
   {
     while (true)
     {

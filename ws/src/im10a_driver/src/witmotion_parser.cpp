@@ -90,7 +90,7 @@ bool WitmotionParser::pushByte(uint8_t b, ImuSample & out)
   }
 
   uint8_t frame[kFrameLen];
-  for (size_t i = 0; i < kFrameLen; ++i)
+  for (std::size_t i = 0; i < kFrameLen; ++i)
   {
     frame[i] = buf_[i];
   }

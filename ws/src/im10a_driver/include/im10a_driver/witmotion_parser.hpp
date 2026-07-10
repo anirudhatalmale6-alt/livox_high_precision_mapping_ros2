@@ -19,6 +19,7 @@
 #ifndef IM10A_DRIVER__WITMOTION_PARSER_HPP_
 #define IM10A_DRIVER__WITMOTION_PARSER_HPP_
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -92,8 +93,8 @@ public:
   bool hasQuaternion() const { return has_quaternion_; }
 
 private:
-  static constexpr size_t kFrameLen = 11;
-  static constexpr size_t kMaxBuffer = 64;  // runaway guard
+  static constexpr std::size_t kFrameLen = 11;
+  static constexpr std::size_t kMaxBuffer = 64;  // runaway guard
 
   std::vector<uint8_t> buf_;
   ImuSample state_;
