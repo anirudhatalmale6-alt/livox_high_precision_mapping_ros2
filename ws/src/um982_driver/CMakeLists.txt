@@ -41,6 +41,11 @@ if(BUILD_TESTING)
   target_include_directories(test_nmea_parser PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(test_nmea_parser nmea_parser)
+
+  # Header-only MAVLink RTCM extractor — no library to link.
+  ament_add_gtest(test_mavlink_rtcm test/test_mavlink_rtcm.cpp)
+  target_include_directories(test_mavlink_rtcm PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
 endif()
 
 ament_package()

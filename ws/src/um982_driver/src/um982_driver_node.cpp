@@ -20,6 +20,7 @@
 #include <geometry_msgs/msg/quaternion_stamped.hpp>
 #include <std_msgs/msg/float64.hpp>
 
+#include "um982_driver/mavlink_rtcm.hpp"
 #include "um982_driver/nmea_parser.hpp"
 #include "um982_driver/ntrip_client.hpp"
 #include "um982_driver/serial_port.hpp"
@@ -43,8 +44,10 @@ public:
     // (metre-level). "ntrip" = pull corrections from an NTRIP caster over the
     // network (e.g. a state CORS network). "serial" = read a raw RTCM3 stream
     // from another serial device (e.g. a radio link fed by your own base).
-    // Whatever the source, the bytes are injected back into this UM982's port,
-    // flipping the GGA fix quality from 1 to 4 (RTK fixed / centimetre).
+    // "mavlink" = extract GPS_RTCM_DATA off a MAVLink link (e.g. a Pixhawk that
+    // already receives your base corrections over its SiK radio). Whatever the
+    // source, the bytes are injected back into this UM982's port, flipping the
+    // GGA fix quality from 1 to 4 (RTK fixed / centimetre).
     rtcm_source_ = declare_parameter<std::string>("rtcm_source", "none");
     NtripConfig ntrip_cfg;
     ntrip_cfg.host = declare_parameter<std::string>("ntrip_host", "");
@@ -55,6 +58,8 @@ public:
     ntrip_cfg.send_gga = declare_parameter<bool>("ntrip_send_gga", true);
     rtcm_serial_port_ = declare_parameter<std::string>("rtcm_serial_port", "/dev/rtcm");
     rtcm_serial_baud_ = declare_parameter<int>("rtcm_serial_baud", 57600);
+    mavlink_serial_port_ = declare_parameter<std::string>("mavlink_serial_port", "/dev/pixhawk");
+    mavlink_serial_baud_ = declare_parameter<int>("mavlink_serial_baud", 57600);
 
     navsat_pub_ = create_publisher<sensor_msgs::msg::NavSatFix>(
       "/gnss_inertial/navsatfix", rclcpp::SensorDataQoS());
@@ -244,11 +249,18 @@ private:
         "RTCM source: serial bridge %s @ %d baud (corrections -> %s)",
         rtcm_serial_port_.c_str(), rtcm_serial_baud_, port_.c_str());
     }
+    else if (rtcm_source_ == "mavlink")
+    {
+      rtcm_thread_ = std::thread(&Um982DriverNode::rtcmMavlinkLoop, this);
+      RCLCPP_INFO(get_logger(),
+        "RTCM source: MAVLink GPS_RTCM_DATA on %s @ %d baud (corrections -> %s)",
+        mavlink_serial_port_.c_str(), mavlink_serial_baud_, port_.c_str());
+    }
     else
     {
       RCLCPP_INFO(get_logger(),
         "RTCM source: none - running standalone single-point fix "
-        "(set rtcm_source to 'ntrip' or 'serial' for RTK).");
+        "(set rtcm_source to 'ntrip', 'serial' or 'mavlink' for RTK).");
     }
   }
 
@@ -285,6 +297,46 @@ private:
           break;  // error — reopen
         }
         // n == 0 is a read timeout; keep waiting for corrections.
+      }
+    }
+  }
+
+  // Reads a MAVLink stream from a flight controller (e.g. a Pixhawk fed base
+  // corrections over its SiK radio), extracts the GPS_RTCM_DATA messages and
+  // injects the reassembled RTCM3 into the UM982.
+  void rtcmMavlinkLoop()
+  {
+    um982::MavlinkRtcm extractor(
+      [this](const unsigned char * d, size_t l) { injectRtcm(d, l); });
+
+    while (running_ && rclcpp::ok())
+    {
+      um982::SerialPort src;
+      try
+      {
+        src.open(mavlink_serial_port_, mavlink_serial_baud_, false);
+        RCLCPP_INFO(get_logger(), "MAVLink link connected on %s.",
+                    mavlink_serial_port_.c_str());
+      }
+      catch (const std::exception & e)
+      {
+        RCLCPP_WARN(get_logger(), "%s. Retrying in 1s.", e.what());
+        std::this_thread::sleep_for(1s);
+        continue;
+      }
+
+      unsigned char buf[2048];
+      while (running_ && rclcpp::ok() && src.isOpen())
+      {
+        ssize_t n = src.readRaw(buf, sizeof(buf));
+        if (n > 0)
+        {
+          extractor.feed(buf, static_cast<size_t>(n));
+        }
+        else if (n < 0)
+        {
+          break;  // error — reopen
+        }
       }
     }
   }
@@ -336,6 +388,8 @@ private:
   std::string rtcm_source_ = "none";
   std::string rtcm_serial_port_;
   int rtcm_serial_baud_ = 57600;
+  std::string mavlink_serial_port_;
+  int mavlink_serial_baud_ = 57600;
 
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr navsat_pub_;
   rclcpp::Publisher<geometry_msgs::msg::QuaternionStamped>::SharedPtr heading_pub_;

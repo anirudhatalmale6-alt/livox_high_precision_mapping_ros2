@@ -8,9 +8,10 @@ To reach **centimetre accuracy** the receiver needs a stream of **RTCM3
 corrections** fed into its serial port. Once corrections are flowing the fix
 quality flips to `4` (RTK fixed, ~1–2 cm) or `5` (RTK float, ~decimetre).
 
-The UM982 driver can source those corrections two ways. In both cases the driver
-injects the RTCM bytes back into the same serial port the UM982 is already on —
-you do **not** need a second cable to the receiver.
+The UM982 driver can source those corrections three ways (`rtcm_source` =
+`ntrip` | `serial` | `mavlink`). In every case the driver injects the RTCM bytes
+back into the same serial port the UM982 is already on — you do **not** need a
+second cable to the receiver.
 
 Check your current fix quality any time with:
 
@@ -77,10 +78,39 @@ Give the rover radio a stable name with a udev rule (same idea as `/dev/gps` and
 `/dev/imu`) so it's always `/dev/rtcm`. Match `rtcm_serial_baud` to whatever the
 radios are configured for (57600 is a common SiK default).
 
-> Note: routing corrections *through the drone's Pixhawk* is not recommended —
-> ArduPilot consumes injected RTCM for its own GPS and does not re-emit it on a
-> serial port. Use the radios as a plain serial bridge instead, straight into the
-> Pi, bypassing the flight controller.
+---
+
+## Route 3 — tap a Pixhawk's MAVLink stream (reuse your existing drone RTK)
+
+If your RTK base **already feeds a Pixhawk/ArduPilot flight controller** (base
+GNSS on the ground station → SiK radio → autopilot, which is a very common
+drone-RTK setup), the corrections are already travelling over the MAVLink link
+as `GPS_RTCM_DATA` messages. ArduPilot forwards those broadcast messages on to
+its other MAVLink links, so a companion Pi can pull the **exact same
+corrections** back out and feed them to the UM982 — no separate correction
+radio for the mapping receiver at all.
+
+Connect the Pi to the MAVLink stream (a serial/telemetry link to the flight
+controller, or the Pi's own paired SiK radio) and launch:
+
+```bash
+ros2 launch livox_hp_mapping_bringup mapping_online.launch.py \
+  rviz:=false \
+  rtcm_source:=mavlink \
+  mavlink_serial_port:=/dev/pixhawk \
+  mavlink_serial_baud:=57600
+```
+
+The driver decodes MAVLink (v1 and v2), extracts and reassembles the
+`GPS_RTCM_DATA` fragments, CRC-checks every frame, and injects the RTCM into the
+UM982. Use `57600` for a SiK telemetry link, or `115200` for a direct USB link
+to the flight controller. Give the FC link a stable udev name (`/dev/pixhawk`)
+the same way as the sensors.
+
+> Note the distinction: this taps the RTCM that flows **over the MAVLink link**,
+> which works cleanly. What does *not* work is trying to pull corrections out of
+> the flight controller's **GPS UART** — ArduPilot consumes those for its own
+> receiver and doesn't re-emit them. Always take them from the MAVLink stream.
 
 ---
 

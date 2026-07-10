@@ -10,10 +10,12 @@ um982_driver:
     # the receiver runs a standalone single-point fix (GGA quality 1, ~1-2 m).
     # Feed it corrections and the fix flips to quality 4 (RTK fixed, ~1-2 cm).
     #
-    #   none   : no corrections (default)
-    #   ntrip  : pull RTCM3 from an NTRIP caster over the internet
-    #   serial : read a raw RTCM3 stream from another serial device (radio link
-    #            fed by your own base station)
+    #   none    : no corrections (default)
+    #   ntrip   : pull RTCM3 from an NTRIP caster over the internet
+    #   serial  : read a raw RTCM3 stream from another serial device (radio link
+    #             fed by your own base station)
+    #   mavlink : extract GPS_RTCM_DATA off a MAVLink link (e.g. a Pixhawk that
+    #             already gets your base corrections over its SiK radio)
     rtcm_source: "none"
 
     # Used when rtcm_source == "ntrip". For a state CORS network (e.g. NYSNet)
@@ -28,3 +30,9 @@ um982_driver:
     # Used when rtcm_source == "serial" (own base + radio link into the Pi).
     rtcm_serial_port: "/dev/rtcm"
     rtcm_serial_baud: 57600
+
+    # Used when rtcm_source == "mavlink" (tap a Pixhawk's MAVLink stream). Point
+    # at the serial link to the flight controller; SiK telemetry is 57600 baud,
+    # a direct USB link to the FC is often 115200.
+    mavlink_serial_port: "/dev/pixhawk"
+    mavlink_serial_baud: 57600

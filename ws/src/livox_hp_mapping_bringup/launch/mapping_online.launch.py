@@ -39,7 +39,7 @@ def generate_launch_description():
         DeclareLaunchArgument('map_file_path', default_value=''),
         DeclareLaunchArgument('lidar_delta_time', default_value='0.1'),
         DeclareLaunchArgument('rviz', default_value='true'),
-        # RTK corrections. rtcm_source: none | ntrip | serial.
+        # RTK corrections. rtcm_source: none | ntrip | serial | mavlink.
         DeclareLaunchArgument('rtcm_source', default_value='none'),
         DeclareLaunchArgument('ntrip_host', default_value=''),
         DeclareLaunchArgument('ntrip_port', default_value='2101'),
@@ -48,6 +48,8 @@ def generate_launch_description():
         DeclareLaunchArgument('ntrip_password', default_value=''),
         DeclareLaunchArgument('rtcm_serial_port', default_value='/dev/rtcm'),
         DeclareLaunchArgument('rtcm_serial_baud', default_value='57600'),
+        DeclareLaunchArgument('mavlink_serial_port', default_value='/dev/pixhawk'),
+        DeclareLaunchArgument('mavlink_serial_baud', default_value='57600'),
     ]
 
     im10a = Node(
@@ -83,6 +85,9 @@ def generate_launch_description():
             'rtcm_serial_port': LaunchConfiguration('rtcm_serial_port'),
             'rtcm_serial_baud': ParameterValue(
                 LaunchConfiguration('rtcm_serial_baud'), value_type=int),
+            'mavlink_serial_port': LaunchConfiguration('mavlink_serial_port'),
+            'mavlink_serial_baud': ParameterValue(
+                LaunchConfiguration('mavlink_serial_baud'), value_type=int),
         }],
     )
 
