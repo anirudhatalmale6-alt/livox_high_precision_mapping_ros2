@@ -4,3 +4,27 @@ um982_driver:
     baud: 115200              # this UM982's COM port rate (confirmed on the rig)
     frame_id: "gnss"
     publish_heading: true     # requires dual-antenna heading logs enabled
+
+    # --- RTK corrections (RTCM3) ------------------------------------------
+    # rtcm_source selects where the correction stream comes from. With "none"
+    # the receiver runs a standalone single-point fix (GGA quality 1, ~1-2 m).
+    # Feed it corrections and the fix flips to quality 4 (RTK fixed, ~1-2 cm).
+    #
+    #   none   : no corrections (default)
+    #   ntrip  : pull RTCM3 from an NTRIP caster over the internet
+    #   serial : read a raw RTCM3 stream from another serial device (radio link
+    #            fed by your own base station)
+    rtcm_source: "none"
+
+    # Used when rtcm_source == "ntrip". For a state CORS network (e.g. NYSNet)
+    # fill in the caster host, the mountpoint nearest you, and your login.
+    ntrip_host: ""            # e.g. "www.nysnet.com" or your caster
+    ntrip_port: 2101
+    ntrip_mountpoint: ""      # e.g. "RTCM3_NEAR" — the caster's mountpoint name
+    ntrip_user: ""
+    ntrip_password: ""
+    ntrip_send_gga: true      # push rover GGA to the caster (needed by VRS mounts)
+
+    # Used when rtcm_source == "serial" (own base + radio link into the Pi).
+    rtcm_serial_port: "/dev/rtcm"
+    rtcm_serial_baud: 57600

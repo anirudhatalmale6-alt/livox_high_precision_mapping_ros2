@@ -39,6 +39,15 @@ def generate_launch_description():
         DeclareLaunchArgument('map_file_path', default_value=''),
         DeclareLaunchArgument('lidar_delta_time', default_value='0.1'),
         DeclareLaunchArgument('rviz', default_value='true'),
+        # RTK corrections. rtcm_source: none | ntrip | serial.
+        DeclareLaunchArgument('rtcm_source', default_value='none'),
+        DeclareLaunchArgument('ntrip_host', default_value=''),
+        DeclareLaunchArgument('ntrip_port', default_value='2101'),
+        DeclareLaunchArgument('ntrip_mountpoint', default_value=''),
+        DeclareLaunchArgument('ntrip_user', default_value=''),
+        DeclareLaunchArgument('ntrip_password', default_value=''),
+        DeclareLaunchArgument('rtcm_serial_port', default_value='/dev/rtcm'),
+        DeclareLaunchArgument('rtcm_serial_baud', default_value='57600'),
     ]
 
     im10a = Node(
@@ -65,6 +74,15 @@ def generate_launch_description():
             'baud': ParameterValue(LaunchConfiguration('um982_baud'), value_type=int),
             'frame_id': 'gnss',
             'publish_heading': True,
+            'rtcm_source': LaunchConfiguration('rtcm_source'),
+            'ntrip_host': LaunchConfiguration('ntrip_host'),
+            'ntrip_port': ParameterValue(LaunchConfiguration('ntrip_port'), value_type=int),
+            'ntrip_mountpoint': LaunchConfiguration('ntrip_mountpoint'),
+            'ntrip_user': LaunchConfiguration('ntrip_user'),
+            'ntrip_password': LaunchConfiguration('ntrip_password'),
+            'rtcm_serial_port': LaunchConfiguration('rtcm_serial_port'),
+            'rtcm_serial_baud': ParameterValue(
+                LaunchConfiguration('rtcm_serial_baud'), value_type=int),
         }],
     )
 

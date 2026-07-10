@@ -4,3 +4,10 @@ log/
 *.pcd
 *.o
 __pycache__/
+
+# client private scan renders (do not publish)
+map_topdown.png
+map_perspective.png
+map_perspective.jpg
+all_points.pcd
+*.pcd

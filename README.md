@@ -116,6 +116,21 @@ different source already publishing on `imu_input_topic`.
 The accumulated cloud is published on `/pub_pointcloud2` and written to
 `all_points.pcd` on shutdown (`map_file_path:=/path` to choose the directory).
 
+### RTK corrections (fix quality 1 → 4)
+
+Out of the box the UM982 runs a single-point fix (~1–2 m). For centimetre
+accuracy, feed it an RTCM3 correction stream — either over the internet (NTRIP)
+or from your own base station via a radio link. Add e.g.:
+
+```bash
+    rtcm_source:=ntrip ntrip_host:=www.nysnet.com ntrip_port:=2101 \
+    ntrip_mountpoint:=RTCM3_NEAR ntrip_user:=USER ntrip_password:=PASS
+```
+
+The driver injects the corrections straight into the UM982 (no extra cable) and
+the fix flips to quality 4. Full setup for both routes is in
+[`docs/rtk_corrections.md`](docs/rtk_corrections.md).
+
 To run just the IMU driver on its own (handy for a first smoke test):
 
 ```bash

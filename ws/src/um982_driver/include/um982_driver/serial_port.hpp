@@ -28,9 +28,14 @@ public:
   SerialPort & operator=(const SerialPort &) = delete;
 
   // Open the port at the given baud. Throws std::runtime_error on failure.
-  void open(const std::string & device, int baud)
+  // Pass writable=true to also allow write() (RTCM injection into the UM982).
+  // The same physical device may be opened twice — once read-only for the NMEA
+  // reader and once writable for correction injection — which is fine on Linux
+  // since we never call read() on the writable handle.
+  void open(const std::string & device, int baud, bool writable = false)
   {
-    fd_ = ::open(device.c_str(), O_RDONLY | O_NOCTTY);
+    int flags = (writable ? O_WRONLY : O_RDONLY) | O_NOCTTY;
+    fd_ = ::open(device.c_str(), flags);
     if (fd_ < 0)
     {
       throw std::runtime_error("failed to open " + device + ": " + std::strerror(errno));
@@ -72,6 +77,45 @@ public:
   }
 
   bool isOpen() const { return fd_ >= 0; }
+
+  // Write a raw buffer (e.g. an RTCM3 correction stream) to the port. Returns
+  // false if the port is closed or the underlying write fails. Loops until the
+  // full buffer is written or an error occurs.
+  bool writeRaw(const unsigned char * data, size_t len)
+  {
+    if (fd_ < 0)
+    {
+      return false;
+    }
+    size_t off = 0;
+    while (off < len)
+    {
+      ssize_t n = ::write(fd_, data + off, len - off);
+      if (n < 0)
+      {
+        if (errno == EINTR) { continue; }
+        return false;
+      }
+      off += static_cast<size_t>(n);
+    }
+    return true;
+  }
+
+  bool writeStr(const std::string & s)
+  {
+    return writeRaw(reinterpret_cast<const unsigned char *>(s.data()), s.size());
+  }
+
+  // Read up to len raw bytes (for a binary RTCM source such as a radio link).
+  // Returns the number of bytes read, 0 on timeout, or -1 on error/closed.
+  ssize_t readRaw(unsigned char * buf, size_t len)
+  {
+    if (fd_ < 0)
+    {
+      return -1;
+    }
+    return ::read(fd_, buf, len);
+  }
 
   void close()
   {
