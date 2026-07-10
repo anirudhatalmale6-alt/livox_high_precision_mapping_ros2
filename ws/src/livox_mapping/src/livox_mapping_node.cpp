@@ -163,15 +163,22 @@ public:
     accumulated_.reset(new pcl::PointCloud<pcl::PointXYZRGB>());
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
-    auto sensor_qos = rclcpp::SensorDataQoS();
+    // The UM982 and IM10A drivers publish sensor streams with BEST_EFFORT
+    // reliability (rclcpp::SensorDataQoS). A subscription must use a compatible
+    // (BEST_EFFORT) reliability or ROS2 silently drops every message. We keep a
+    // deep KeepLast history so the time-alignment state machine still has plenty
+    // of samples buffered. The LiDAR driver publishes RELIABLE, so its
+    // subscription stays RELIABLE to match.
+    auto imu_qos = rclcpp::QoS(rclcpp::KeepLast(20000)).best_effort();
+    auto gnss_qos = rclcpp::QoS(rclcpp::KeepLast(1000)).best_effort();
     sub_lidar_ = create_subscription<sensor_msgs::msg::PointCloud2>(
       "/livox/lidar", rclcpp::QoS(1000),
       std::bind(&LivoxMappingNode::lidarCbk, this, std::placeholders::_1));
     sub_imu_ = create_subscription<sensor_msgs::msg::Imu>(
-      "/gnss_inertial/imu", rclcpp::QoS(20000),
+      "/gnss_inertial/imu", imu_qos,
       std::bind(&LivoxMappingNode::imuCbk, this, std::placeholders::_1));
     sub_rtk_ = create_subscription<sensor_msgs::msg::NavSatFix>(
-      "/gnss_inertial/navsatfix", rclcpp::QoS(1000),
+      "/gnss_inertial/navsatfix", gnss_qos,
       std::bind(&LivoxMappingNode::rtkCbk, this, std::placeholders::_1));
 
     pub_cloud_ = create_publisher<sensor_msgs::msg::PointCloud2>("pub_pointcloud2", 1);
