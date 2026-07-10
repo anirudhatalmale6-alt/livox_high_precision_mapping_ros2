@@ -62,8 +62,11 @@ magnetometer cannot provide reliably.
 
 Install ROS2 Humble, then the one **external** vendor driver:
 
-- **Livox** — [`livox_ros_driver2`](https://github.com/Livox-SDK/livox_ros_driver2)
-  (ROS2 driver for Mid-40/Mid-70/Avia/etc). Build it into the same workspace.
+- **Livox Avia** — [`livox_ros2_driver`](https://github.com/Livox-SDK/livox_ros2_driver)
+  + [`Livox-SDK`](https://github.com/Livox-SDK/Livox-SDK) (v1). The Avia (and
+  Mid-40/70, Horizon, Tele-15) use the original Livox-SDK; the newer Mid-360/HAP
+  use Livox-SDK2 / `livox_ros_driver2` instead. Full setup, network config and
+  broadcast-code steps are in [`docs/lidar_avia.md`](docs/lidar_avia.md).
 
 The **IM10A does not need any vendor driver** — this workspace ships its own
 `im10a_driver` that reads the IM10A directly (WitMotion 0x55 protocol, 115200

@@ -6,6 +6,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -16,6 +17,9 @@ def generate_launch_description():
     map_path_arg = DeclareLaunchArgument(
         'map_file_path', default_value='',
         description='Directory to write all_points.pcd on shutdown (empty = cwd).')
+    delta_arg = DeclareLaunchArgument(
+        'lidar_delta_time', default_value='0.1',
+        description='LiDAR frame period (s). Avia @10Hz = 0.1; set 1/publish_freq.')
 
     mapping_node = Node(
         package='livox_mapping',
@@ -23,7 +27,8 @@ def generate_launch_description():
         name='livox_mapping',
         output='screen',
         parameters=[{
-            'lidar_delta_time': 0.01,
+            'lidar_delta_time': ParameterValue(
+                LaunchConfiguration('lidar_delta_time'), value_type=float),
             'map_file_path': LaunchConfiguration('map_file_path'),
             'save_pcd': True,
         }],

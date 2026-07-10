@@ -113,28 +113,34 @@ cd "$WS_DIR" || die "workspace dir not found: $WS_DIR"
 colcon build --symlink-install || die "colcon build failed — send me the output above"
 ok "Workspace built successfully"
 
-# ---- best-effort: Livox ROS2 driver (needed at runtime for the Mid-40) ------
-step "Setting up the Livox LiDAR ROS2 driver (best-effort)"
+# ---- best-effort: Livox ROS2 driver (needed at runtime for the Avia) ---------
+# The Avia (and Mid-40/70, Horizon, Tele-15) use the original Livox-SDK v1 and
+# the livox_ros2_driver. (The newer Mid-360/HAP use Livox-SDK2 / livox_ros_driver2
+# instead — different SDK.) See docs/lidar_avia.md for the network config.
+step "Setting up the Livox LiDAR ROS2 driver for the Avia (best-effort)"
 LIVOX_OK=1
-if [ ! -d "$HOME/Livox-SDK2" ]; then
-  git clone https://github.com/Livox-SDK/Livox-SDK2.git "$HOME/Livox-SDK2" || LIVOX_OK=0
+if [ ! -d "$HOME/Livox-SDK" ]; then
+  git clone https://github.com/Livox-SDK/Livox-SDK.git "$HOME/Livox-SDK" || LIVOX_OK=0
 fi
-if [ "$LIVOX_OK" = "1" ] && [ -d "$HOME/Livox-SDK2" ]; then
-  ( mkdir -p "$HOME/Livox-SDK2/build" && cd "$HOME/Livox-SDK2/build" \
+if [ "$LIVOX_OK" = "1" ] && [ -d "$HOME/Livox-SDK" ]; then
+  ( mkdir -p "$HOME/Livox-SDK/build" && cd "$HOME/Livox-SDK/build" \
     && cmake .. && make -j"$(nproc)" && sudo make install ) || LIVOX_OK=0
 fi
-if [ "$LIVOX_OK" = "1" ] && [ ! -d "$WS_DIR/src/livox_ros_driver2" ]; then
-  git clone https://github.com/Livox-SDK/livox_ros_driver2.git \
-        "$WS_DIR/src/livox_ros_driver2" || LIVOX_OK=0
+if [ "$LIVOX_OK" = "1" ] && [ ! -d "$WS_DIR/src/livox_ros2_driver" ]; then
+  git clone https://github.com/Livox-SDK/livox_ros2_driver.git \
+        "$WS_DIR/src/livox_ros2_driver" || LIVOX_OK=0
 fi
-if [ "$LIVOX_OK" = "1" ] && [ -f "$WS_DIR/src/livox_ros_driver2/build.sh" ]; then
-  ( cd "$WS_DIR/src/livox_ros_driver2" && ./build.sh humble ) || LIVOX_OK=0
+# livox_ros2_driver builds as part of the normal colcon build below; re-run it so
+# the driver is available immediately.
+if [ "$LIVOX_OK" = "1" ] && [ -d "$WS_DIR/src/livox_ros2_driver" ]; then
+  ( set +u; cd "$WS_DIR" && source /opt/ros/humble/setup.bash \
+    && colcon build --symlink-install --packages-select livox_ros2_driver ) || LIVOX_OK=0
 fi
 if [ "$LIVOX_OK" = "1" ]; then
-  ok "Livox driver installed"
+  ok "Livox Avia driver installed (configure the broadcast code — see docs/lidar_avia.md)"
 else
-  warn "Livox driver auto-install did not complete. Follow the Livox-SDK2 +"
-  warn "livox_ros_driver2 READMEs on GitHub — it does not block our build."
+  warn "Livox driver auto-install did not complete — it does not block our build."
+  warn "Follow docs/lidar_avia.md to install Livox-SDK + livox_ros2_driver by hand."
 fi
 
 # ---- done -------------------------------------------------------------------

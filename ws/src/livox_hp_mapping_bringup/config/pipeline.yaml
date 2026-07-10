@@ -3,10 +3,17 @@
 
 um982_driver:
   ros__parameters:
-    port: "/dev/ttyUSB0"
-    baud: 230400
+    port: "/dev/gps"               # stable udev name (scripts/99-livox-sensors.rules)
+    baud: 115200                   # confirmed COM rate on this UM982
     frame_id: "gnss"
     publish_heading: true
+
+im10a_driver:
+  ros__parameters:
+    port: "/dev/imu"               # stable udev name
+    baud: 115200
+    frame_id: "imu"
+    imu_topic: "/imu/data"
 
 imu_gnss_adapter:
   ros__parameters:
@@ -18,7 +25,7 @@ imu_gnss_adapter:
 
 livox_mapping:
   ros__parameters:
-    lidar_delta_time: 0.01         # 100 Hz Mid-40 frame period; adjust per sensor
+    lidar_delta_time: 0.1          # Avia @10Hz frame period; set 1/publish_freq
     save_pcd: true
     map_file_path: ""              # directory for all_points.pcd (empty = cwd)
     # rtk2lidar: row-major 4x4 extrinsic (GNSS/IMU body -> LiDAR). Calibrate for

@@ -20,6 +20,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -36,6 +37,7 @@ def generate_launch_description():
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
         DeclareLaunchArgument('heading_offset_deg', default_value='0.0'),
         DeclareLaunchArgument('map_file_path', default_value=''),
+        DeclareLaunchArgument('lidar_delta_time', default_value='0.1'),
         DeclareLaunchArgument('rviz', default_value='true'),
     ]
 
@@ -47,7 +49,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('start_im10a')),
         parameters=[{
             'port': LaunchConfiguration('im10a_port'),
-            'baud': LaunchConfiguration('im10a_baud'),
+            'baud': ParameterValue(LaunchConfiguration('im10a_baud'), value_type=int),
             'frame_id': 'imu',
             'imu_topic': LaunchConfiguration('imu_input_topic'),
         }],
@@ -60,7 +62,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'port': LaunchConfiguration('um982_port'),
-            'baud': LaunchConfiguration('um982_baud'),
+            'baud': ParameterValue(LaunchConfiguration('um982_baud'), value_type=int),
             'frame_id': 'gnss',
             'publish_heading': True,
         }],
@@ -86,6 +88,7 @@ def generate_launch_description():
         launch_arguments={
             'rviz': LaunchConfiguration('rviz'),
             'map_file_path': LaunchConfiguration('map_file_path'),
+            'lidar_delta_time': LaunchConfiguration('lidar_delta_time'),
         }.items(),
     )
 
