@@ -68,17 +68,28 @@ the QR/SN label). Put it in the driver's config so it connects to your unit:
     {
       "broadcast_code": "REPLACE_WITH_YOUR_AVIA_CODE",
       "enable_connect": true,
+      "enable_fan": true,
       "return_mode": 0,
       "coordinate": 0,
-      "imu_rate": 0
+      "imu_rate": 0,
+      "extrinsic_parameter_source": 0
     }
-  ]
+  ],
+  "timesync_config": {
+    "enable_timesync": false,
+    "device_name": "/dev/ttyUSB0",
+    "comm_device_type": 0,
+    "baudrate_index": 2,
+    "parity_index": 0
+  }
 }
 ```
 
 `imu_rate: 0` disables the Avia's own IMU (we use the IM10A instead). Leave
-`coordinate: 0` (cartesian). Rebuild is not needed for a config change if built
-with `--symlink-install`; otherwise re-run `colcon build`.
+`coordinate: 0` (cartesian) and `return_mode: 0` (single-return, matches the
+Avia's "Single First"). `enable_timesync` stays `false` because the Avia is
+already fed 1PPS in hardware (its Viewer shows "PPS Sync"). Rebuild is not needed
+for a config change when built with `--symlink-install`.
 
 ## 5. Run and verify the point cloud
 
