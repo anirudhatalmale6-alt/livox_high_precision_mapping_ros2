@@ -130,9 +130,13 @@ if [ "$LIVOX_OK" = "1" ] && [ -f "$HOME/Livox-SDK/sdk_core/src/base/thread_base.
     || sed -i '/#include "noncopyable.h"/a #include <memory>' \
          "$HOME/Livox-SDK/sdk_core/src/base/thread_base.h"
 fi
+# -DCMAKE_POSITION_INDEPENDENT_CODE=ON is required: livox_ros2_driver links the
+# SDK's static lib into a shared object; without PIC the link fails with
+# "relocation R_X86_64_TPOFF32 ... can not be used when making a shared object".
 if [ "$LIVOX_OK" = "1" ] && [ -d "$HOME/Livox-SDK" ]; then
   ( mkdir -p "$HOME/Livox-SDK/build" && cd "$HOME/Livox-SDK/build" \
-    && cmake .. && make -j"$(nproc)" && sudo make install ) || LIVOX_OK=0
+    && cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. \
+    && make -j"$(nproc)" && sudo make install ) || LIVOX_OK=0
 fi
 if [ "$LIVOX_OK" = "1" ] && [ ! -d "$WS_DIR/src/livox_ros2_driver" ]; then
   git clone https://github.com/Livox-SDK/livox_ros2_driver.git \

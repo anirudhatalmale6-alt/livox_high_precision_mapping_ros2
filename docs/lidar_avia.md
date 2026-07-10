@@ -47,8 +47,12 @@ git clone https://github.com/Livox-SDK/Livox-SDK.git
 # "'shared_ptr' in namespace 'std' does not name a type". Add the missing include:
 sed -i '/#include "noncopyable.h"/a #include <memory>' \
     ~/Livox-SDK/sdk_core/src/base/thread_base.h
+# -DCMAKE_POSITION_INDEPENDENT_CODE=ON is required — livox_ros2_driver links this
+# static lib into a shared object; without PIC the link fails with
+# "relocation R_X86_64_TPOFF32 ... can not be used when making a shared object".
 mkdir -p ~/Livox-SDK/build && cd ~/Livox-SDK/build
-cmake .. && make -j"$(nproc)" && sudo make install && sudo ldconfig
+cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. \
+    && make -j"$(nproc)" && sudo make install && sudo ldconfig
 
 # livox_ros2_driver, into this workspace
 cd ~/livox_high_precision_mapping_ros2/ws/src
