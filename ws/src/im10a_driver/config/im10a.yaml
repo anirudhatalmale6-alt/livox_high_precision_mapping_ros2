@@ -1,6 +1,6 @@
 im10a_driver:
   ros__parameters:
-    port: "/dev/ttyUSB0"      # serial device the IM10A enumerates as (CH340)
+    port: "/dev/imu"          # stable udev name (see scripts/99-livox-sensors.rules)
     baud: 115200              # confirmed IM10A output rate
     frame_id: "imu"
     imu_topic: "/imu/data"    # drop-in for the vendor driver; adapter reads this

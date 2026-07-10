@@ -1,0 +1,26 @@
+# Stable device names for the Livox mapping sensors.
+#
+# The UM982 (GPS) and the IM10A (IMU) both use the same CH340 USB-serial chip
+# (1a86:7523) with no unique serial number, so they cannot be told apart by
+# device ID. Instead we pin each to the physical USB socket it is plugged into
+# (KERNELS = the USB port path). Keep each sensor in the same socket and it will
+# always come up with the same name, regardless of plug order or reboot:
+#
+#   /dev/gps  -> UM982 RTK GNSS
+#   /dev/imu  -> IM10A IMU
+#
+# If you move a sensor to a different USB port (e.g. onto a powered hub), the
+# KERNELS path changes. Re-run this to get the new paths and update the lines:
+#
+#   for p in /dev/ttyUSB*; do echo "== $p =="; \
+#     udevadm info -q property -n $p | grep -E 'KERNELS|DEVPATH|ID_PATH'; done
+#
+# Install:
+#   sudo cp scripts/99-livox-sensors.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# GPS (UM982) — currently on hub port 1-5.2
+SUBSYSTEM=="tty", KERNELS=="1-5.2:1.0", SYMLINK+="gps", MODE="0666"
+
+# IMU (IM10A) — currently on direct port 1-7
+SUBSYSTEM=="tty", KERNELS=="1-7:1.0", SYMLINK+="imu", MODE="0666"

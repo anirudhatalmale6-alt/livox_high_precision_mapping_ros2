@@ -1,6 +1,6 @@
 um982_driver:
   ros__parameters:
-    port: "/dev/ttyUSB0"      # serial device the UM982 enumerates as
-    baud: 230400              # UM982 factory default
+    port: "/dev/gps"          # stable udev name (see scripts/99-livox-sensors.rules)
+    baud: 115200              # this UM982's COM port rate (confirmed on the rig)
     frame_id: "gnss"
     publish_heading: true     # requires dual-antenna heading logs enabled

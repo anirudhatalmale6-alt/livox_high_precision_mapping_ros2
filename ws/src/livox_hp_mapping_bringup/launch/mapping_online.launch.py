@@ -27,9 +27,9 @@ def generate_launch_description():
     mapping_share = get_package_share_directory('livox_mapping')
 
     args = [
-        DeclareLaunchArgument('um982_port', default_value='/dev/ttyUSB0'),
-        DeclareLaunchArgument('um982_baud', default_value='230400'),
-        DeclareLaunchArgument('im10a_port', default_value='/dev/ttyUSB1'),
+        DeclareLaunchArgument('um982_port', default_value='/dev/gps'),
+        DeclareLaunchArgument('um982_baud', default_value='115200'),
+        DeclareLaunchArgument('im10a_port', default_value='/dev/imu'),
         DeclareLaunchArgument('im10a_baud', default_value='115200'),
         DeclareLaunchArgument('start_im10a', default_value='true'),
         DeclareLaunchArgument('imu_input_topic', default_value='/imu/data'),
