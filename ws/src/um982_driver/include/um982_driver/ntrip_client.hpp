@@ -124,6 +124,13 @@ private:
       if (running_)
       {
         warn_("NTRIP stream dropped - reconnecting.");
+        // Back off ~1.5s before redialling. Prevents hammering (and getting
+        // rate-limited/banned by) a caster that closes early, and stops the
+        // console being flooded if a stream genuinely keeps dropping.
+        for (int i = 0; i < 15 && running_; ++i)
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
       }
     }
   }
@@ -168,8 +175,17 @@ private:
     tv.tv_usec = 0;
     setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
+    // NTRIP v1 request (HTTP/1.0). Two things matter here:
+    //  * The User-Agent MUST start with "NTRIP" so the caster treats this as a
+    //    streaming mount and holds the socket open, rather than a one-shot HTTP
+    //    request. (Trimble Pivot / Leica casters key off this.)
+    //  * We must NOT send "Connection: close" — HTTP-compliant casters honour it
+    //    and hang up right after the response, which showed up as the stream
+    //    "connecting" then "dropping" many times a second and never locking RTK.
+    // A Host header is included for casters that require it; harmless otherwise.
     std::string req =
       "GET /" + cfg_.mountpoint + " HTTP/1.0\r\n"
+      "Host: " + cfg_.host + ":" + std::to_string(cfg_.port) + "\r\n"
       "User-Agent: NTRIP livox_hp_mapping/1.0\r\n"
       "Accept: */*\r\n";
     if (!cfg_.user.empty())
@@ -177,7 +193,7 @@ private:
       req += "Authorization: Basic " +
              base64Encode(cfg_.user + ":" + cfg_.password) + "\r\n";
     }
-    req += "Connection: close\r\n\r\n";
+    req += "\r\n";
     if (!sendAll(req))
     {
       warn_("NTRIP: request send failed.");
