@@ -75,6 +75,18 @@ port — no extra cable:
 
 See [`docs/rtk_corrections.md`](docs/rtk_corrections.md) for the full setup of each.
 
+## 7. Split launch (sensors vs mapping) + timestamped map files (added later)
+
+- **Split launch.** The sensors/RTK side and the mapping side can now be started
+  separately, so you can power up, get your RTK fix (`navsatfix status: 2`), and
+  only *then* start recording — and stop/restart the mapping without disturbing
+  the GPS fix:
+  - `ros2 launch livox_hp_mapping_bringup sensors.launch.py ...` (terminal 1 — GPS/IMU/RTK)
+  - `ros2 launch livox_hp_mapping_bringup mapping.launch.py ...` (terminal 2 — the map)
+  The old one-command `mapping_online.launch.py` still works and runs both together.
+- **Timestamped output.** Each run now saves to `livox_map_YYYY-MM-DD_HH-MM-SS.pcd`
+  instead of always overwriting `all_points.pcd`, so runs never clobber each other.
+
 ---
 
 ## Where the detail lives

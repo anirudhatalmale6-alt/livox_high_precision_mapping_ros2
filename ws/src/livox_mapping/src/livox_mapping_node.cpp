@@ -15,6 +15,7 @@
 // original so the mapping output is unchanged; only the ROS layer and the
 // sensor sources differ.
 #include <cmath>
+#include <ctime>
 #include <memory>
 #include <string>
 #include <vector>
@@ -193,12 +194,26 @@ public:
                 lidar_delta_time_);
   }
 
+  // Build a filename stamped with the local date/time, e.g.
+  // livox_map_2026-07-17_10-29-48.pcd, so each run is saved separately and
+  // never overwrites the previous one.
+  std::string timestampedFilename()
+  {
+    std::time_t t = std::time(nullptr);
+    std::tm tm_buf{};
+    localtime_r(&t, &tm_buf);
+    char stamp[24];
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d_%H-%M-%S", &tm_buf);
+    return std::string("livox_map_") + stamp + ".pcd";
+  }
+
   void saveMap()
   {
     if (save_pcd_ && !accumulated_->empty())
     {
-      std::string file = map_file_path_.empty() ? "all_points.pcd"
-                                                 : map_file_path_ + "/all_points.pcd";
+      std::string name = timestampedFilename();
+      std::string file = map_file_path_.empty() ? name
+                                                 : map_file_path_ + "/" + name;
       pcl::PCDWriter writer;
       writer.writeBinary(file, *accumulated_);
       RCLCPP_INFO(get_logger(), "Saved %zu points to %s",

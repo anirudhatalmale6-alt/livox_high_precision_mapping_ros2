@@ -1,34 +1,29 @@
-# Full online high-precision mapping bringup (one command, everything at once).
+# Sensors + RTK bringup — everything EXCEPT the mapping node.
 #
 # Starts:
-#   1. IM10A IMU driver      (this workspace - native, no vendor driver needed)
-#   2. UM982 RTK driver      (this workspace, incl. NTRIP/RTCM corrections)
+#   1. IM10A IMU driver                (this workspace)
+#   2. UM982 RTK GNSS driver           (this workspace, incl. NTRIP/RTCM)
 #   3. IM10A -> /gnss_inertial/imu adapter (this workspace)
-#   4. livox_mapping node    (this workspace)
+#
+# Run this FIRST, in its own terminal, and leave it running. Wait until the
+# GPS has an RTK fix (navsatfix status: 2) before you start the mapping. Then
+# launch mapping.launch.py in a second terminal when you're ready to record.
 #
 # The Livox LiDAR driver is started separately (its own launch), same as before.
-#
-# If you would rather bring the sensors up first, get your RTK fix, and only
-# THEN start recording, use the two split launches instead:
-#     ros2 launch livox_hp_mapping_bringup sensors.launch.py ...   (terminal 1)
-#     ros2 launch livox_hp_mapping_bringup mapping.launch.py ...   (terminal 2)
-# This file simply runs both together for convenience.
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription)
+from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 
-def generate_launch_description():
-    mapping_share = get_package_share_directory('livox_mapping')
-
-    args = [
+def sensor_arguments():
+    """Launch args shared by the sensors bringup (reused by mapping_online)."""
+    return [
         DeclareLaunchArgument('um982_port', default_value='/dev/gps'),
         DeclareLaunchArgument('um982_baud', default_value='115200'),
         DeclareLaunchArgument('im10a_port', default_value='/dev/imu'),
@@ -37,9 +32,6 @@ def generate_launch_description():
         DeclareLaunchArgument('imu_input_topic', default_value='/imu/data'),
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
         DeclareLaunchArgument('heading_offset_deg', default_value='0.0'),
-        DeclareLaunchArgument('map_file_path', default_value=''),
-        DeclareLaunchArgument('lidar_delta_time', default_value='0.1'),
-        DeclareLaunchArgument('rviz', default_value='true'),
         # RTK corrections. rtcm_source: none | ntrip | serial | mavlink.
         DeclareLaunchArgument('rtcm_source', default_value='none'),
         DeclareLaunchArgument('ntrip_host', default_value=''),
@@ -53,6 +45,9 @@ def generate_launch_description():
         DeclareLaunchArgument('mavlink_serial_baud', default_value='57600'),
     ]
 
+
+def sensor_nodes():
+    """The IM10A, UM982 and IMU-adapter nodes (reused by mapping_online)."""
     im10a = Node(
         package='im10a_driver',
         executable='im10a_driver_node',
@@ -106,14 +101,8 @@ def generate_launch_description():
         }],
     )
 
-    mapping = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(mapping_share, 'launch', 'livox_mapping.launch.py')),
-        launch_arguments={
-            'rviz': LaunchConfiguration('rviz'),
-            'map_file_path': LaunchConfiguration('map_file_path'),
-            'lidar_delta_time': LaunchConfiguration('lidar_delta_time'),
-        }.items(),
-    )
+    return [im10a, um982, imu_adapter]
 
-    return LaunchDescription(args + [im10a, um982, imu_adapter, mapping])
+
+def generate_launch_description():
+    return LaunchDescription(sensor_arguments() + sensor_nodes())
