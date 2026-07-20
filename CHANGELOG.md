@@ -108,6 +108,34 @@ IMU only provides tilt (roll/pitch). If you ever want to go back to an external
 IM10A, pass `start_im10a:=true imu_input_topic:=/imu/data` and set the IM10A
 `rtk2lidar` in `pipeline.yaml`.
 
+## 9. Auto-enable the UM982's dual-antenna heading (added later)
+
+A sharp map needs two things per frame: **position** (from RTK) and **heading**
+(which way the sensor points). The UM982 computes a precise heading from its two
+antennas — but it does **not** stream that heading unless it is told to. If it
+isn't streaming, the `~/heading` topic exists but never publishes, the map
+quietly falls back to the IMU's own drifting yaw, and walls smear by a foot or
+two even with a perfect RTK position.
+
+The `um982_driver` now asks the receiver to stream its heading automatically on
+every connect (parameter `configure_heading`, default **true**): it sends
+`LOG GPHDT ONTIME 0.1` and `LOG UNIHEADINGA ONTIME 0.1` over the same channel
+used for RTCM injection. The driver parses either message, so whichever the
+firmware emits will flow. It does not `SAVECONFIG`, so your receiver's stored
+settings are left untouched.
+
+Requirements for a heading value to actually appear:
+
+- **Both antennas connected** (ANT1 + ANT2) with a decent separation and clear
+  sky — heading is a baseline solution between the two antennas.
+- Once heading flows, set `heading_offset_deg` to the angle between the antenna
+  baseline and the LiDAR's forward (x) axis, so the map points true. A wrong
+  offset rotates the whole map; a wrong/absent heading smears it.
+
+Verify: `ros2 topic echo /um982_driver/heading_deg` should print a live bearing
+(0–360). If it stays silent, the receiver has no heading solution yet (check
+both antennas / sky view).
+
 ---
 
 ## Where the detail lives

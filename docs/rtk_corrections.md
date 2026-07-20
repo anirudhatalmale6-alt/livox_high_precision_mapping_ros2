@@ -127,3 +127,24 @@ Two independent things improve your map:
 For the best outdoor result run with RTK corrections **and**
 `use_gnss_heading:=true`. Indoors (no sky) keep `use_gnss_heading:=false` and
 just pan slowly in place — see the mapping notes.
+
+### Making sure heading is actually flowing
+
+`use_gnss_heading:=true` only tells the *adapter* to use GPS heading — the UM982
+still has to be streaming one. The driver now asks for it automatically on
+connect (`configure_heading:=true`, default), sending
+`LOG GPHDT ONTIME 0.1` / `LOG UNIHEADINGA ONTIME 0.1`. Confirm it is working:
+
+```bash
+ros2 topic echo /um982_driver/heading_deg      # expect a live bearing 0–360
+```
+
+If that topic exists but never prints a value, the receiver has **no heading
+solution**. Checklist:
+
+1. **Both antennas connected** (ANT1 primary + ANT2 secondary) — heading is a
+   baseline solution between the two; one antenna can never produce it.
+2. Clear sky for both antennas, and a reasonable separation between them.
+3. Once a value appears, set `heading_offset_deg` to the yaw angle between the
+   antenna baseline and the LiDAR's forward (x) axis. Wrong offset = whole map
+   rotated; missing heading = map smeared.

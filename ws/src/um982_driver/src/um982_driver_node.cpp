@@ -39,6 +39,12 @@ public:
     baud_ = declare_parameter<int>("baud", 230400);
     frame_id_ = declare_parameter<std::string>("frame_id", "gnss");
     publish_heading_ = declare_parameter<bool>("publish_heading", true);
+    // On connect, tell the UM982 to STREAM its dual-antenna heading message.
+    // The receiver computes heading from ANT1/ANT2 automatically, but it will
+    // not output it unless asked — without this the ~/heading topic exists but
+    // never publishes, and the map falls back to the drifting IMU yaw. Requires
+    // BOTH antennas connected with a good baseline fix.
+    configure_heading_ = declare_parameter<bool>("configure_heading", true);
 
     // RTCM correction source for RTK. "none" = standalone single-point fix
     // (metre-level). "ntrip" = pull corrections from an NTRIP caster over the
@@ -108,6 +114,11 @@ private:
         RCLCPP_WARN(get_logger(), "%s. Retrying in 1s.", e.what());
         std::this_thread::sleep_for(1s);
         continue;
+      }
+
+      if (configure_heading_ && publish_heading_)
+      {
+        configureReceiverHeading();
       }
 
       std::string line;
@@ -374,6 +385,43 @@ private:
     }
   }
 
+  // Ask the UM982 to stream its dual-antenna heading. Reuses the same writable
+  // handle as RTCM injection. Sent on every (re)connect at runtime — we do NOT
+  // SAVECONFIG, to avoid flash wear and to leave the receiver's saved config
+  // untouched. Both the NMEA (GPHDT) and Unicore (UNIHEADINGA) heading messages
+  // are enabled; this driver parses either, so whichever the firmware supports
+  // will flow. Harmless if only one antenna is connected (no heading solution =
+  // the message carries no valid heading and nothing is published).
+  void configureReceiverHeading()
+  {
+    std::lock_guard<std::mutex> lk(writer_mtx_);
+    if (!writer_.isOpen())
+    {
+      try
+      {
+        writer_.open(port_, baud_, true);
+      }
+      catch (const std::exception & e)
+      {
+        RCLCPP_WARN(get_logger(), "Heading config: cannot open %s for write: %s",
+                    port_.c_str(), e.what());
+        return;
+      }
+    }
+    static const char * const kCmds[] = {
+      "LOG GPHDT ONTIME 0.1\r\n",
+      "LOG UNIHEADINGA ONTIME 0.1\r\n",
+    };
+    for (const char * cmd : kCmds)
+    {
+      writer_.writeStr(cmd);
+      std::this_thread::sleep_for(100ms);
+    }
+    RCLCPP_INFO(get_logger(),
+                "Requested UM982 heading output (GPHDT + UNIHEADINGA @10Hz). "
+                "Needs both antennas with a good baseline to produce a value.");
+  }
+
   std::string latestGga()
   {
     std::lock_guard<std::mutex> lk(gga_mtx_);
@@ -384,6 +432,7 @@ private:
   int baud_ = 230400;
   std::string frame_id_;
   bool publish_heading_ = true;
+  bool configure_heading_ = true;
 
   std::string rtcm_source_ = "none";
   std::string rtcm_serial_port_;

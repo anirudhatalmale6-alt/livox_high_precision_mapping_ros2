@@ -35,6 +35,8 @@ def sensor_arguments():
         DeclareLaunchArgument('imu_input_topic', default_value='/livox/imu'),
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
         DeclareLaunchArgument('heading_offset_deg', default_value='0.0'),
+        # Auto-ask the UM982 to stream its dual-antenna heading on connect.
+        DeclareLaunchArgument('configure_heading', default_value='true'),
         # RTK corrections. rtcm_source: none | ntrip | serial | mavlink.
         DeclareLaunchArgument('rtcm_source', default_value='none'),
         DeclareLaunchArgument('ntrip_host', default_value=''),
@@ -75,6 +77,7 @@ def sensor_nodes():
             'baud': ParameterValue(LaunchConfiguration('um982_baud'), value_type=int),
             'frame_id': 'gnss',
             'publish_heading': True,
+            'configure_heading': LaunchConfiguration('configure_heading'),
             'rtcm_source': LaunchConfiguration('rtcm_source'),
             'ntrip_host': LaunchConfiguration('ntrip_host'),
             'ntrip_port': ParameterValue(LaunchConfiguration('ntrip_port'), value_type=int),
