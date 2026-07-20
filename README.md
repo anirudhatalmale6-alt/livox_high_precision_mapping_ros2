@@ -10,7 +10,10 @@ This version:
 - **Replaces the Applanix APX-15** GNSS/INS with a modern component sensor set:
   - **Unicore UM982** — dual-antenna RTK GNSS → centimetre-level absolute
     position + true heading.
-  - **Hiwonder IM10A** — 10-axis MEMS IMU → high-rate attitude (roll/pitch/yaw).
+  - **Livox Avia built-in IMU** (default) → high-rate attitude (roll/pitch).
+    A separate IMU is **not required** — the Avia's own 200 Hz IMU is used.
+  - **Hiwonder IM10A** — optional external 10-axis IMU alternative, supported
+    via `start_im10a:=true` if you prefer a standalone IMU.
 - **Keeps the original mapping maths unchanged** — the Mercator georeferencing,
   per-point motion compensation ("deskew") and the `rtk2lidar` extrinsic
   transform are ported 1:1, so the point-cloud output is equivalent.
@@ -23,23 +26,24 @@ attitude. We reconstruct the same information from two devices:
 | Original (APX-15)             | Replacement                                   |
 | ----------------------------- | --------------------------------------------- |
 | RTK GNSS position (cm)        | **UM982** GGA → `sensor_msgs/NavSatFix`       |
-| Fused attitude (roll/pitch/yaw)| **IM10A** → `sensor_msgs/Imu`                |
-| (heading from INS)            | **UM982** dual-antenna heading (optional yaw) |
+| Attitude (roll/pitch)         | **Avia built-in IMU** `/livox/imu` (or IM10A) |
+| Heading (yaw)                 | **UM982** dual-antenna heading                |
 | PPS hardware time sync        | UM982 1PPS (see *Time synchronisation*)       |
 
-The IM10A is a MEMS IMU with **no GNSS of its own** — all absolute position
-comes from the UM982's RTK solution. Its dual-antenna heading is also used
-(optionally) to give the IMU an absolute, drift-free yaw, which a MEMS
-magnetometer cannot provide reliably.
+Position comes entirely from the UM982's RTK solution; the IMU only supplies
+tilt (roll/pitch). By default that IMU is the **Avia's own built-in 200 Hz
+IMU**, so no extra IMU box is needed. The UM982's dual-antenna heading gives an
+absolute, drift-free yaw, which a MEMS magnetometer cannot provide reliably.
+An external IM10A is still supported (`start_im10a:=true`) if preferred.
 
 ## Architecture / topics
 
 ```
  livox_ros_driver2 ──/livox/lidar (PointCloud2)──┐
                                                   │
- im10a_driver ──/imu/data──► imu_gnss_adapter ──/gnss_inertial/imu──┤
-                                 ▲                                   │
- um982_driver ──/um982_driver/heading───┘                           ▼
+ Avia built-in IMU ──/livox/imu──► imu_gnss_adapter ──/gnss_inertial/imu──┤
+   (or im10a_driver ──/imu/data)     ▲                                   │
+ um982_driver ──/um982_driver/heading─┘                                  ▼
      └────────────────/gnss_inertial/navsatfix (NavSatFix)──────────► livox_mapping
                                                                           │
                                               /pub_pointcloud2 (georeferenced cloud)
@@ -103,15 +107,15 @@ source install/setup.bash
 
 ```bash
 ros2 launch livox_hp_mapping_bringup mapping_online.launch.py \
-    um982_port:=/dev/ttyUSB0 um982_baud:=230400 \
-    im10a_port:=/dev/ttyUSB1 im10a_baud:=115200 \
+    um982_port:=/dev/gps um982_baud:=115200 \
     use_gnss_heading:=true
 ```
 
-This starts the IM10A driver, the UM982 driver, the IMU adapter and the mapping
-node (plus RViz). Only the Livox Mid-40 driver is started separately (or add it
-to the bringup). Set `start_im10a:=false` if you want to feed the IMU from a
-different source already publishing on `imu_input_topic`.
+This starts the UM982 driver, the IMU adapter (fed by the Avia's built-in IMU on
+`/livox/imu`) and the mapping node (plus RViz). Only the Livox Avia driver is
+started separately (or add it to the bringup). No separate IMU is needed by
+default. To use an external IM10A instead, add
+`start_im10a:=true imu_input_topic:=/imu/data im10a_port:=/dev/imu`.
 
 The accumulated cloud is published on `/pub_pointcloud2` and written to
 `all_points.pcd` on shutdown (`map_file_path:=/path` to choose the directory).

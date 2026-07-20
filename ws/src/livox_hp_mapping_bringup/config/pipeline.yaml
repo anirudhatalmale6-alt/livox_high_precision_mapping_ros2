@@ -8,6 +8,9 @@ um982_driver:
     frame_id: "gnss"
     publish_heading: true
 
+# The Avia's BUILT-IN IMU is the default attitude source (/livox/imu, 200 Hz),
+# so the separate IM10A is OFF by default. This block is only used if you set
+# start_im10a:=true (external IMU rig).
 im10a_driver:
   ros__parameters:
     port: "/dev/imu"               # stable udev name
@@ -17,10 +20,10 @@ im10a_driver:
 
 imu_gnss_adapter:
   ros__parameters:
-    input_imu_topic: "/imu/data"   # topic published by the Hiwonder IM10A driver
+    input_imu_topic: "/livox/imu"  # Avia built-in IMU (set /imu/data for IM10A)
     use_gnss_heading: true         # use UM982 dual-antenna yaw (recommended)
     gnss_heading_topic: "/um982_driver/heading"
-    heading_offset_deg: 0.0        # antenna-baseline vs IMU x-axis yaw offset
+    heading_offset_deg: 0.0        # antenna-baseline vs LiDAR x-axis yaw offset
     output_frame_id: "imu"
 
 livox_mapping:
@@ -28,9 +31,11 @@ livox_mapping:
     lidar_delta_time: 0.1          # Avia @10Hz frame period; set 1/publish_freq
     save_pcd: true
     map_file_path: ""              # directory for all_points.pcd (empty = cwd)
-    # rtk2lidar: row-major 4x4 extrinsic (GNSS/IMU body -> LiDAR). Calibrate for
-    # your rig; default matches the original reference mounting.
-    rtk2lidar: [-1.0, 0.0, 0.0, 0.0,
-                 0.0, -1.0, 0.0, 0.0,
-                 0.0, 0.0, 1.0, 0.0,
-                 0.0, 0.0, 0.0, 1.0]
+    # rtk2lidar: row-major 4x4 extrinsic (IMU/GNSS body -> LiDAR).
+    # IDENTITY is correct for the Avia BUILT-IN IMU (already aligned with the
+    # LiDAR frame). For an external IM10A rotated 180 deg in yaw, use instead:
+    #   [-1,0,0,0,  0,-1,0,0,  0,0,1,0,  0,0,0,1]
+    rtk2lidar: [1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0]

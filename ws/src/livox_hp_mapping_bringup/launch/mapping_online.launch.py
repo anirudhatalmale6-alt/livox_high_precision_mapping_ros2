@@ -33,8 +33,11 @@ def generate_launch_description():
         DeclareLaunchArgument('um982_baud', default_value='115200'),
         DeclareLaunchArgument('im10a_port', default_value='/dev/imu'),
         DeclareLaunchArgument('im10a_baud', default_value='115200'),
-        DeclareLaunchArgument('start_im10a', default_value='true'),
-        DeclareLaunchArgument('imu_input_topic', default_value='/imu/data'),
+        # Default rig uses the Avia's BUILT-IN IMU (/livox/imu), so the separate
+        # IM10A is OFF by default. To use an external IM10A instead, pass
+        #   start_im10a:=true imu_input_topic:=/imu/data
+        DeclareLaunchArgument('start_im10a', default_value='false'),
+        DeclareLaunchArgument('imu_input_topic', default_value='/livox/imu'),
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
         DeclareLaunchArgument('heading_offset_deg', default_value='0.0'),
         DeclareLaunchArgument('map_file_path', default_value=''),

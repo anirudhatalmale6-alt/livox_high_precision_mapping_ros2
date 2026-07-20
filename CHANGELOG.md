@@ -87,6 +87,27 @@ See [`docs/rtk_corrections.md`](docs/rtk_corrections.md) for the full setup of e
 - **Timestamped output.** Each run now saves to `livox_map_YYYY-MM-DD_HH-MM-SS.pcd`
   instead of always overwriting `all_points.pcd`, so runs never clobber each other.
 
+## 8. Use the Avia's built-in IMU — no separate IMU needed (added later)
+
+The Livox Avia has its own built-in IMU (200 Hz). It is now the default attitude
+source, so the separate Hiwonder IM10A is **no longer required** — you can
+unplug it. Nothing else about your run changes.
+
+What this changed under the hood:
+
+- The Livox driver config now has `imu_rate: 1`, so the Avia publishes
+  `/livox/imu` at 200 Hz.
+- The bringup now defaults to `start_im10a:=false` and reads attitude from
+  `/livox/imu` instead of the IM10A's `/imu/data`.
+- The `rtk2lidar` extrinsic default is now **identity**, which is correct for
+  the built-in IMU (it shares the LiDAR body and is already aligned with the
+  point-cloud frame — no 180° mount rotation to undo).
+
+You still get position + heading from the UM982 (that part is unchanged); the
+IMU only provides tilt (roll/pitch). If you ever want to go back to an external
+IM10A, pass `start_im10a:=true imu_input_topic:=/imu/data` and set the IM10A
+`rtk2lidar` in `pipeline.yaml`.
+
 ---
 
 ## Where the detail lives

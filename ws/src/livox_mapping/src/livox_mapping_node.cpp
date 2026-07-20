@@ -141,10 +141,22 @@ public:
     map_file_path_ = declare_parameter<std::string>("map_file_path", "");
     save_pcd_ = declare_parameter<bool>("save_pcd", true);
 
-    // rtk2lidar extrinsic (row-major 4x4). Default matches the original rig.
+    // rtk2lidar extrinsic (row-major 4x4): transform from the IMU/GNSS body
+    // frame to the LiDAR frame.
+    //
+    // Default is IDENTITY, which is correct for the Livox Avia's BUILT-IN IMU:
+    // that IMU shares the LiDAR body and Livox aligns its axes with the point-
+    // cloud frame, so no rotation is needed. (The small few-cm translation
+    // offset between the Avia IMU and the optical centre is negligible at
+    // walking scale; add it here if you ever need survey-exact lever-arm.)
+    //
+    // If you instead use a SEPARATE, externally mounted IMU (e.g. the IM10A)
+    // rotated 180 deg in yaw relative to the LiDAR, override rtk2lidar with:
+    //   [-1, 0, 0, 0,  0, -1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+    // Symptom of a wrong extrinsic: the whole map comes out rotated/flipped.
     std::vector<double> default_ext = {
-      -1, 0, 0, 0,
-       0, -1, 0, 0,
+       1, 0, 0, 0,
+       0, 1, 0, 0,
        0, 0, 1, 0,
        0, 0, 0, 1};
     auto ext = declare_parameter<std::vector<double>>("rtk2lidar", default_ext);

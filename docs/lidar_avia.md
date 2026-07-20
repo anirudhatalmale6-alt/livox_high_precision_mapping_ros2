@@ -80,7 +80,7 @@ the QR/SN label). Put it in the driver's config so it connects to your unit:
       "enable_fan": true,
       "return_mode": 0,
       "coordinate": 0,
-      "imu_rate": 0,
+      "imu_rate": 1,
       "extrinsic_parameter_source": 0
     }
   ],
@@ -94,11 +94,20 @@ the QR/SN label). Put it in the driver's config so it connects to your unit:
 }
 ```
 
-`imu_rate: 0` disables the Avia's own IMU (we use the IM10A instead). Leave
-`coordinate: 0` (cartesian) and `return_mode: 0` (single-return, matches the
-Avia's "Single First"). `enable_timesync` stays `false` because the Avia is
-already fed 1PPS in hardware (its Viewer shows "PPS Sync"). Rebuild is not needed
-for a config change when built with `--symlink-install`.
+`imu_rate: 1` turns the Avia's own built-in IMU ON (publishes `/livox/imu` at
+200 Hz). This is now the default attitude source, so **no separate IMU is
+needed** — you can leave the IM10A unplugged. Leave `coordinate: 0` (cartesian)
+and `return_mode: 0` (single-return, matches the Avia's "Single First").
+`enable_timesync` stays `false` when the Avia is fed 1PPS in hardware (its Viewer
+shows "PPS Sync"); if the Viewer shows "No PPS", either wire the 1PPS or leave
+this as-is (mapping still works, just without hardware time-sync). Rebuild is not
+needed for a config change when built with `--symlink-install`.
+
+After enabling it, confirm the IMU is streaming:
+
+```bash
+ros2 topic hz /livox/imu        # expect ~200 Hz
+```
 
 ## 5. Run and verify the point cloud
 
