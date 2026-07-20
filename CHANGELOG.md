@@ -136,6 +136,28 @@ Verify: `ros2 topic echo /um982_driver/heading_deg` should print a live bearing
 (0–360). If it stays silent, the receiver has no heading solution yet (check
 both antennas / sky view).
 
+## 10. Periodic autosave — you always get a .pcd, even on a hard Ctrl-C (added later)
+
+Previously the map was written only once, on graceful shutdown (Ctrl-C → the
+node saves as it exits). Under heavy load the node can take a few seconds to
+wind down, and if it is killed hard before it finishes (e.g. a double Ctrl-C, or
+the launcher escalating to SIGKILL), the save never runs and **no file is
+produced** — you lose the whole run.
+
+The mapping node now flushes the map to disk **every 15 seconds while running**
+(parameter `autosave_sec`, default 15; 0 disables):
+
+- One file per run, timestamped at the start, rewritten in place — so you still
+  end up with a single `livox_map_YYYY-MM-DD_HH-MM-SS.pcd`.
+- Each write goes to a `.tmp` and is then renamed over the target, so a kill
+  mid-write can never leave a truncated file — the previous complete map
+  survives.
+- The on-exit save still runs too; autosave just guarantees that, worst case,
+  you have a map that is at most ~15 s old no matter how the node stops.
+
+Tip: to stop a run, press Ctrl-C **once** and give it a few seconds — don't
+double-tap, which forces a hard kill. But even if you do, autosave has your map.
+
 ---
 
 ## Where the detail lives

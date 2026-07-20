@@ -20,6 +20,10 @@ def generate_launch_description():
     delta_arg = DeclareLaunchArgument(
         'lidar_delta_time', default_value='0.1',
         description='LiDAR frame period (s). Avia @10Hz = 0.1; set 1/publish_freq.')
+    autosave_arg = DeclareLaunchArgument(
+        'autosave_sec', default_value='15.0',
+        description='Flush the map to its .pcd every N seconds while running so a '
+                    'file always exists even after a hard kill. 0 disables.')
 
     mapping_node = Node(
         package='livox_mapping',
@@ -31,6 +35,8 @@ def generate_launch_description():
                 LaunchConfiguration('lidar_delta_time'), value_type=float),
             'map_file_path': LaunchConfiguration('map_file_path'),
             'save_pcd': True,
+            'autosave_sec': ParameterValue(
+                LaunchConfiguration('autosave_sec'), value_type=float),
         }],
     )
 
@@ -42,4 +48,5 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
-    return LaunchDescription([rviz_arg, map_path_arg, mapping_node, rviz_node])
+    return LaunchDescription(
+        [rviz_arg, map_path_arg, delta_arg, autosave_arg, mapping_node, rviz_node])

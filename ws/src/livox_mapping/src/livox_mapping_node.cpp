@@ -14,7 +14,9 @@
 // correction, the rtk2lidar extrinsic transform) are ported 1:1 from the
 // original so the mapping output is unchanged; only the ROS layer and the
 // sensor sources differ.
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <ctime>
 #include <memory>
 #include <string>
@@ -140,6 +142,12 @@ public:
     lidar_delta_time_ = declare_parameter<double>("lidar_delta_time", 0.01);
     map_file_path_ = declare_parameter<std::string>("map_file_path", "");
     save_pcd_ = declare_parameter<bool>("save_pcd", true);
+    // Periodically flush the map to disk while running, so a file always exists
+    // even if the node is killed hard (e.g. Ctrl-C during heavy load, where the
+    // process may be SIGKILLed before the on-exit save can run). Every run
+    // writes to ONE timestamped file, rewritten in place. 0 disables.
+    autosave_sec_ = declare_parameter<double>("autosave_sec", 15.0);
+    last_save_ = std::chrono::steady_clock::now();
 
     // rtk2lidar extrinsic (row-major 4x4): transform from the IMU/GNSS body
     // frame to the LiDAR frame.
@@ -219,17 +227,59 @@ public:
     return std::string("livox_map_") + stamp + ".pcd";
   }
 
-  void saveMap()
+  // One output file per run, chosen the first time we save (start-of-run stamp)
+  // and rewritten in place by every periodic and final save.
+  const std::string & sessionFile()
   {
-    if (save_pcd_ && !accumulated_->empty())
+    if (session_file_.empty())
     {
       std::string name = timestampedFilename();
-      std::string file = map_file_path_.empty() ? name
-                                                 : map_file_path_ + "/" + name;
-      pcl::PCDWriter writer;
-      writer.writeBinary(file, *accumulated_);
-      RCLCPP_INFO(get_logger(), "Saved %zu points to %s",
-                  accumulated_->size(), file.c_str());
+      session_file_ = map_file_path_.empty() ? name : map_file_path_ + "/" + name;
+    }
+    return session_file_;
+  }
+
+  // Write the accumulated cloud to `file`. Writes to a temporary then renames,
+  // so the target is only ever replaced by a COMPLETE file — a hard kill mid-
+  // write cannot leave a truncated .pcd (the previous complete one survives).
+  void saveMap()
+  {
+    if (!save_pcd_ || accumulated_->empty())
+    {
+      return;
+    }
+    const std::string & file = sessionFile();
+    const std::string tmp = file + ".tmp";
+    pcl::PCDWriter writer;
+    if (writer.writeBinary(tmp, *accumulated_) != 0)
+    {
+      RCLCPP_WARN(get_logger(), "Map save failed to write %s", tmp.c_str());
+      return;
+    }
+    if (std::rename(tmp.c_str(), file.c_str()) != 0)
+    {
+      RCLCPP_WARN(get_logger(), "Map save failed to finalise %s", file.c_str());
+      return;
+    }
+    RCLCPP_INFO(get_logger(), "Saved %zu points to %s",
+                accumulated_->size(), file.c_str());
+  }
+
+  // Called from the processing path after each frame is appended. Flushes to
+  // disk at most once per autosave_sec_, on the same thread, so it is safe
+  // without locking (the cloud is only touched by this thread).
+  void maybeAutosave()
+  {
+    if (autosave_sec_ <= 0.0)
+    {
+      return;
+    }
+    auto nowt = std::chrono::steady_clock::now();
+    double since = std::chrono::duration<double>(nowt - last_save_).count();
+    if (since >= autosave_sec_)
+    {
+      saveMap();
+      last_save_ = nowt;
     }
   }
 
@@ -491,13 +541,20 @@ private:
     pub_cloud_->publish(output);
 
     *accumulated_ += *colour;
+
+    maybeAutosave();
   }
 
   // parameters
   double lidar_delta_time_ = 0.01;
   std::string map_file_path_;
   bool save_pcd_ = true;
+  double autosave_sec_ = 15.0;
   Eigen::Matrix4d rtk2lidar_ = Eigen::Matrix4d::Identity();
+
+  // Autosave bookkeeping (single output file per run, periodic in-place flush).
+  std::string session_file_;
+  std::chrono::steady_clock::time_point last_save_;
 
   // buffers
   std::vector<sensor_msgs::msg::PointCloud2::SharedPtr> lidar_datas_;
