@@ -18,6 +18,8 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <fstream>
+#include <iomanip>
 #include <memory>
 #include <string>
 #include <vector>
@@ -267,8 +269,48 @@ public:
       RCLCPP_WARN(get_logger(), "Map save failed to finalise %s", file.c_str());
       return;
     }
+    writeGeoRef(file);
     RCLCPP_INFO(get_logger(), "Saved %zu points to %s",
                 accumulated_->size(), file.c_str());
+  }
+
+  // Write a small human-readable sidecar (<file>.geo.txt) recording where the
+  // local (0,0,0) sits on the globe. The .pcd itself stores points in a local
+  // metric frame (metres from the first RTK fix) - that is the georeferenced
+  // map, true to scale and orientation, but PCD carries no lat/lon field, so
+  // this file is what lets you place the whole cloud back on the earth.
+  void writeGeoRef(const std::string & pcd_file)
+  {
+    if (!global_ref_set_)
+    {
+      return;
+    }
+    const std::string geo = pcd_file + ".geo.txt";
+    std::ofstream f(geo);
+    if (!f)
+    {
+      return;
+    }
+    f << std::fixed << std::setprecision(8)
+      << "Georeference for " << pcd_file << "\n"
+      << "\n"
+      << "The point cloud is in a LOCAL metric frame (units: metres).\n"
+      << "Its origin (0,0,0) is the first RTK position of this run:\n"
+      << "  latitude  = " << lla0_[1] << " deg\n"
+      << "  longitude = " << lla0_[0] << " deg\n"
+      << std::setprecision(3)
+      << "  altitude  = " << lla0_[2] << " m\n"
+      << "\n"
+      << "Axes (original livox_high_precision_mapping convention):\n"
+      << "  x = local northing (m)\n"
+      << "  y = local easting  (m)\n"
+      << "  z = vertical (m), positive downward (anchor_alt - point_alt)\n"
+      << "\n"
+      << "Scale and orientation are already true (RTK position + dual-antenna\n"
+      << "heading), so this single anchor places the entire cloud on the globe:\n"
+      << "project each point about the origin above with a local-tangent-plane\n"
+      << "(ENU) or Mercator transform to recover real-world lat/lon or UTM.\n";
+    f.close();
   }
 
   // Called from the processing path after each frame is appended. Flushes to
@@ -546,6 +588,11 @@ private:
       {
         T1_ = T;
         global_ref_set_ = true;
+        RCLCPP_INFO(get_logger(),
+                    "Map anchor (local 0,0,0) set at first RTK fix: "
+                    "lat %.8f  lon %.8f  alt %.3f m. Written to the .geo.txt "
+                    "sidecar so the cloud can be georeferenced.",
+                    lla0_[1], lla0_[0], lla0_[2]);
       }
 
       trans = rtk2lidar_ * T1_.inverse() * T * rtk2lidar_.inverse();

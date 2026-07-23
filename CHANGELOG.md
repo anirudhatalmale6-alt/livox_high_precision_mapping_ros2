@@ -188,6 +188,28 @@ pointcloud/gnss/imu-to-combine-later step in this rewrite: position and attitude
 are baked into every point live, so the one `.pcd` you get out is already the
 finished georeferenced map.
 
+## 12. Georeference sidecar — where the map sits on the globe (added later)
+
+The `.pcd` stores points in a **local metric frame**: metres from the first RTK
+fix of the run, with true scale and true orientation (from RTK position +
+dual-antenna heading). That *is* the georeferenced map — but the PCD format has
+no lat/lon field, so opening it in CloudCompare shows local metres, not global
+coordinates. That's expected, and it matches the original project.
+
+Each saved map now also writes a small sidecar next to it,
+`livox_map_YYYY-MM-DD_HH-MM-SS.pcd.geo.txt`, recording the real-world position of
+the local origin (0,0,0):
+
+- the anchor's latitude / longitude / altitude (the first RTK fix), and
+- the axis convention (x = northing, y = easting, z = vertical, metres).
+
+With that single anchor the whole cloud can be placed back on the earth (project
+each point about the origin with an ENU / Mercator transform to get lat/lon or
+UTM). The anchor is also printed to the log when the run starts fusing. If you'd
+rather the `.pcd` itself carry absolute UTM easting/northing so CloudCompare
+shows real-world coordinates directly, that can be enabled — ask and it's a
+small addition.
+
 ---
 
 ## Where the detail lives
