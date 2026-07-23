@@ -53,6 +53,18 @@ struct Heading
   bool has_pitch = false;
 };
 
+// UTC date + time-of-day recovered from an RMC sentence. Used to put the whole
+// recording on satellite (GPS/UTC) time instead of the computer's clock.
+struct RmcTime
+{
+  bool valid = false;
+  int year = 0;                // 4-digit year (e.g. 2026)
+  int month = 0;               // 1-12
+  int day = 0;                 // 1-31
+  double utc_seconds = 0.0;    // seconds of day from the UTC field (hhmmss.ss)
+  double unix_seconds = 0.0;   // full UTC time as seconds since 1970-01-01
+};
+
 // Verify the "*HH" NMEA checksum of a full sentence (with or without a leading
 // '$' / '#' and with or without a trailing CR/LF). Returns true when the XOR of
 // the payload bytes matches the two hex digits after '*'. Sentences without a
@@ -76,6 +88,18 @@ GgaFix parseGga(const std::string & sentence);
 // Parse a heading sentence. Accepts NMEA "HDT" (heading true) and the Unicore
 // "#UNIHEADINGA" log. Returns valid=false otherwise.
 Heading parseHeading(const std::string & sentence);
+
+// Parse an RMC sentence for the UTC date + time. Returns valid=false if the
+// sentence is not an RMC, fails the checksum, is marked void, or lacks a date.
+// unix_seconds is UTC seconds since 1970-01-01 (no leap-second offset, matching
+// system Unix time), so it lines up directly with a computer clock stamp.
+RmcTime parseRmc(const std::string & sentence);
+
+// Convert a civil UTC date + seconds-of-day to Unix time (seconds since
+// 1970-01-01T00:00:00Z), using a pure proleptic-Gregorian calculation (no libc
+// timezone state), so it is deterministic and unit-testable. Leap seconds are
+// intentionally ignored, matching POSIX/ROS system time.
+double civilToUnixSeconds(int year, int month, int day, double seconds_of_day);
 
 // Convert an NMEA ddmm.mmmm coordinate plus hemisphere ('N'/'S'/'E'/'W') to
 // signed decimal degrees.

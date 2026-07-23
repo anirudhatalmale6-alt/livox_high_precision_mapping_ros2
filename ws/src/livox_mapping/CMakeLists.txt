@@ -11,6 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
@@ -21,7 +22,7 @@ find_package(Eigen3 REQUIRED)
 
 add_executable(livox_mapping_node src/livox_mapping_node.cpp)
 ament_target_dependencies(livox_mapping_node
-  rclcpp sensor_msgs nav_msgs geometry_msgs tf2 tf2_ros pcl_conversions)
+  rclcpp sensor_msgs std_msgs nav_msgs geometry_msgs tf2 tf2_ros pcl_conversions)
 target_include_directories(livox_mapping_node PUBLIC ${PCL_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS})
 target_link_libraries(livox_mapping_node ${PCL_LIBRARIES})
 

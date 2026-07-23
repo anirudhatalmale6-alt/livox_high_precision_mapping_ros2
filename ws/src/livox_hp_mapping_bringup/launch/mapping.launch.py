@@ -26,6 +26,11 @@ def mapping_arguments():
         DeclareLaunchArgument(
             'lidar_delta_time', default_value='0.1',
             description='LiDAR frame period (s). Avia @10Hz = 0.1.'),
+        DeclareLaunchArgument(
+            'use_gps_time', default_value='false',
+            description='Shift LiDAR/IMU onto satellite time (set this true only '
+                        'when sensors.launch.py was started with '
+                        'gps_time_sync:=true).'),
     ]
 
 
@@ -39,6 +44,7 @@ def mapping_include():
             'rviz': LaunchConfiguration('rviz'),
             'map_file_path': LaunchConfiguration('map_file_path'),
             'lidar_delta_time': LaunchConfiguration('lidar_delta_time'),
+            'use_gps_time': LaunchConfiguration('use_gps_time'),
         }.items(),
     )
 

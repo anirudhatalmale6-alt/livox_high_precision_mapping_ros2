@@ -28,6 +28,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <std_msgs/msg/float64.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_ros/transform_broadcaster.h>
@@ -151,6 +152,14 @@ public:
     autosave_sec_ = declare_parameter<double>("autosave_sec", 15.0);
     last_save_ = std::chrono::steady_clock::now();
 
+    // Put the LiDAR + IMU (computer-clock stamped by the Livox driver) onto the
+    // same satellite clock as the GPS. When true, we add the (satellite -
+    // computer) offset published by the UM982 driver on /gnss_inertial/time_offset
+    // to each incoming LiDAR/IMU stamp; NavSatFix already arrives in satellite
+    // time. Default false = original behaviour (everything on the computer clock,
+    // which still aligns because all three share it). See docs/time_sync.md.
+    use_gps_time_ = declare_parameter<bool>("use_gps_time", false);
+
     // rtk2lidar extrinsic (row-major 4x4): transform from the IMU/GNSS body
     // frame to the LiDAR frame.
     //
@@ -203,6 +212,9 @@ public:
     sub_rtk_ = create_subscription<sensor_msgs::msg::NavSatFix>(
       "/gnss_inertial/navsatfix", gnss_qos,
       std::bind(&LivoxMappingNode::rtkCbk, this, std::placeholders::_1));
+    sub_time_offset_ = create_subscription<std_msgs::msg::Float64>(
+      "/gnss_inertial/time_offset", rclcpp::SensorDataQoS(),
+      std::bind(&LivoxMappingNode::timeOffsetCbk, this, std::placeholders::_1));
 
     pub_cloud_ = create_publisher<sensor_msgs::msg::PointCloud2>("pub_pointcloud2", 1);
     pub_odometry_ = create_publisher<nav_msgs::msg::Odometry>("pub_odometry", 1);
@@ -337,6 +349,15 @@ public:
   // it announces success once and then goes quiet.
   void diagnostics()
   {
+    if (use_gps_time_ && !have_time_offset_ && !warned_no_offset_)
+    {
+      RCLCPP_WARN(get_logger(),
+                  "use_gps_time is on but no /gnss_inertial/time_offset has "
+                  "arrived yet - is the UM982 driver running with "
+                  "gps_time_sync:=true (and a fix)? Using computer-clock stamps "
+                  "until it does.");
+      warned_no_offset_ = true;
+    }
     if (!accumulated_->empty())
     {
       if (!announced_flowing_)
@@ -387,8 +408,30 @@ public:
   }
 
 private:
+  // In GPS-time mode, move a computer-clock stamp onto satellite time by adding
+  // the offset the UM982 driver publishes. Applied uniformly to LiDAR and IMU, so
+  // their relative alignment (and monotonicity) is preserved; NavSatFix already
+  // arrives in satellite time and is left untouched. No-op until an offset is
+  // received, or when the feature is off.
+  void maybeShiftToGpsTime(builtin_interfaces::msg::Time & stamp)
+  {
+    if (!use_gps_time_ || !have_time_offset_)
+    {
+      return;
+    }
+    rclcpp::Time t(stamp);
+    stamp = t + rclcpp::Duration::from_seconds(gps_time_offset_);
+  }
+
+  void timeOffsetCbk(const std_msgs::msg::Float64::SharedPtr msg)
+  {
+    gps_time_offset_ = msg->data;
+    have_time_offset_ = true;
+  }
+
   void lidarCbk(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
+    maybeShiftToGpsTime(msg->header.stamp);
     if (!lidar_datas_.empty() &&
         toTime(lidar_datas_.back()->header.stamp) > toTime(msg->header.stamp))
     {
@@ -403,6 +446,7 @@ private:
     // Store only what the mapping maths needs: the orientation quaternion.
     nav_msgs::msg::Odometry o;
     o.header = msg->header;
+    maybeShiftToGpsTime(o.header.stamp);
     o.pose.pose.orientation = msg->orientation;
     imu_datas_.push_back(o);
   }
@@ -658,7 +702,13 @@ private:
   std::string map_file_path_;
   bool save_pcd_ = true;
   double autosave_sec_ = 15.0;
+  bool use_gps_time_ = false;
   Eigen::Matrix4d rtk2lidar_ = Eigen::Matrix4d::Identity();
+
+  // GPS-time offset from the UM982 driver (satellite - computer clock, seconds).
+  double gps_time_offset_ = 0.0;
+  bool have_time_offset_ = false;
+  bool warned_no_offset_ = false;
 
   // Autosave bookkeeping (single output file per run, periodic in-place flush).
   std::string session_file_;
@@ -686,6 +736,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_lidar_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
   rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr sub_rtk_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr sub_time_offset_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_cloud_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odometry_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;

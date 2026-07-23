@@ -182,6 +182,73 @@ GgaFix parseGga(const std::string & sentence)
   return fix;
 }
 
+double civilToUnixSeconds(int year, int month, int day, double seconds_of_day)
+{
+  // Days from 1970-01-01 to the given civil date (Howard Hinnant's algorithm,
+  // valid for the full proleptic Gregorian calendar). Pure integer maths, no
+  // timezone/libc state, so it is deterministic across machines and testable.
+  int y = year;
+  y -= (month <= 2) ? 1 : 0;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const int yoe = y - era * 400;                                   // [0, 399]
+  const int doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+  const int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;           // [0, 146096]
+  const long days = static_cast<long>(era) * 146097 + doe - 719468;
+  return static_cast<double>(days) * 86400.0 + seconds_of_day;
+}
+
+RmcTime parseRmc(const std::string & sentence)
+{
+  RmcTime t;
+  if (messageType(sentence) != "RMC")
+  {
+    return t;
+  }
+  if (!validateChecksum(sentence))
+  {
+    return t;
+  }
+  auto f = splitFields(sentence);
+  // RMC: id,utc,status,lat,N/S,lon,E/W,speed,course,date(ddmmyy),magvar,E/W,...
+  if (f.size() < 10)
+  {
+    return t;
+  }
+  // Status must be 'A' (valid); 'V' means navigation-receiver warning.
+  if (f[2] != "A" && f[2] != "a")
+  {
+    return t;
+  }
+  const std::string & date = f[9];  // ddmmyy
+  if (date.size() < 6)
+  {
+    return t;
+  }
+  t.utc_seconds = toDouble(f[1]);  // hhmmss.ss packed; converted below
+  const int dd = toInt(date.substr(0, 2));
+  const int mm = toInt(date.substr(2, 2));
+  const int yy = toInt(date.substr(4, 2));
+  if (dd < 1 || dd > 31 || mm < 1 || mm > 12)
+  {
+    return t;
+  }
+  t.day = dd;
+  t.month = mm;
+  t.year = 2000 + yy;  // ddmmyy is a 2-digit year; UM982 is a post-2000 device
+
+  // Unpack hhmmss.ss into seconds-of-day.
+  const double packed = t.utc_seconds;
+  const int hh = static_cast<int>(packed / 10000.0);
+  const int min = static_cast<int>((packed - hh * 10000.0) / 100.0);
+  const double sec = packed - hh * 10000.0 - min * 100.0;
+  const double sod = hh * 3600.0 + min * 60.0 + sec;
+
+  t.utc_seconds = sod;
+  t.unix_seconds = civilToUnixSeconds(t.year, t.month, t.day, sod);
+  t.valid = true;
+  return t;
+}
+
 Heading parseHeading(const std::string & sentence)
 {
   Heading h;

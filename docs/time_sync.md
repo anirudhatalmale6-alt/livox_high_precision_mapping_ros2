@@ -4,9 +4,41 @@ The mapping node aligns the LiDAR, IMU and RTK streams by ROS timestamp, so the
 better the host clock tracks GPS time, the sharper the map. With the UM982 1PPS
 wired in, discipline the mini-PC clock to GPS as follows.
 
-There are two independent uses of PPS in this rig; do both if you can:
+There are two independent uses of PPS in this rig; do both if you can.
 
-## 1. Discipline the host clock with gpsd + chrony (recommended)
+But first, the easiest option, which needs no system setup at all:
+
+## 0. Built-in software GPS-time (recommended — no OS config, no rewiring)
+
+The drivers can put the whole recording on satellite (GPS/UTC) time by
+themselves, without gpsd/chrony or any LiDAR sync wiring. Turn it on with a
+single switch:
+
+- One-command (Style B): `mapping_online.launch.py ... gps_time_sync:=true`
+- Split (Style A): pass `gps_time_sync:=true` to **sensors.launch.py** AND
+  `use_gps_time:=true` to **mapping.launch.py** (both terminals).
+
+What it does under the hood:
+
+- The UM982 driver asks the receiver for `RMC` (UTC date + time), stamps
+  `NavSatFix` with that satellite time, and publishes the measured
+  `(satellite − computer)` clock offset on `/gnss_inertial/time_offset`.
+- The mapping node adds that offset to every LiDAR and IMU stamp, so all three
+  streams end up on one satellite clock. The offset is smoothed, so a computer
+  clock that is wrong — or that jumps mid-run — no longer affects the map.
+
+Why this is enough: map sharpness only needs the three sensors to agree with
+*each other*; this makes them agree on GPS time specifically, so the result is
+both sharp and carries true absolute timestamps. Verify it's active — you'll see
+`GPS-time sync ON` from the UM982 driver and a value on
+`/gnss_inertial/time_offset`. Default is **off** (computer-clock stamping), which
+also produces sharp maps because all sensors share the one computer clock.
+
+Sections 1 and 2 below are the hardware-PPS routes. They add the last slice of
+absolute precision (they remove the few-millisecond serial latency that the
+software offset still carries), but they are optional on top of section 0.
+
+## 1. Discipline the host clock with gpsd + chrony
 
 Feed the UM982's NMEA (for coarse time) and 1PPS (for the sharp edge) to the
 mini PC. If 1PPS is on a serial DCD line or a GPIO, wire it accordingly.

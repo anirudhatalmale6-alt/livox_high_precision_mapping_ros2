@@ -37,6 +37,11 @@ def sensor_arguments():
         DeclareLaunchArgument('heading_offset_deg', default_value='0.0'),
         # Auto-ask the UM982 to stream its dual-antenna heading on connect.
         DeclareLaunchArgument('configure_heading', default_value='true'),
+        # Stamp GPS data in satellite (GPS/UTC) time and publish the clock
+        # offset so the mapper can put LiDAR/IMU on the same clock. Off by
+        # default. If you set this true, also pass use_gps_time:=true to
+        # mapping.launch.py in the other terminal.
+        DeclareLaunchArgument('gps_time_sync', default_value='false'),
         # RTK corrections. rtcm_source: none | ntrip | serial | mavlink.
         DeclareLaunchArgument('rtcm_source', default_value='none'),
         DeclareLaunchArgument('ntrip_host', default_value=''),
@@ -78,6 +83,7 @@ def sensor_nodes():
             'frame_id': 'gnss',
             'publish_heading': True,
             'configure_heading': LaunchConfiguration('configure_heading'),
+            'gps_time_sync': LaunchConfiguration('gps_time_sync'),
             'rtcm_source': LaunchConfiguration('rtcm_source'),
             'ntrip_host': LaunchConfiguration('ntrip_host'),
             'ntrip_port': ParameterValue(LaunchConfiguration('ntrip_port'), value_type=int),

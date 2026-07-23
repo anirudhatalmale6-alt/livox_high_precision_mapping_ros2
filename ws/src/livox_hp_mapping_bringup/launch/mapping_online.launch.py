@@ -41,6 +41,9 @@ def generate_launch_description():
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
         DeclareLaunchArgument('heading_offset_deg', default_value='0.0'),
         DeclareLaunchArgument('configure_heading', default_value='true'),
+        # Put LiDAR+IMU+GPS all on satellite (GPS/UTC) time instead of the
+        # computer clock. Off by default (computer clock still aligns fine).
+        DeclareLaunchArgument('gps_time_sync', default_value='false'),
         DeclareLaunchArgument('map_file_path', default_value=''),
         DeclareLaunchArgument('lidar_delta_time', default_value='0.1'),
         DeclareLaunchArgument('rviz', default_value='true'),
@@ -82,6 +85,7 @@ def generate_launch_description():
             'frame_id': 'gnss',
             'publish_heading': True,
             'configure_heading': LaunchConfiguration('configure_heading'),
+            'gps_time_sync': LaunchConfiguration('gps_time_sync'),
             'rtcm_source': LaunchConfiguration('rtcm_source'),
             'ntrip_host': LaunchConfiguration('ntrip_host'),
             'ntrip_port': ParameterValue(LaunchConfiguration('ntrip_port'), value_type=int),
@@ -118,6 +122,7 @@ def generate_launch_description():
             'rviz': LaunchConfiguration('rviz'),
             'map_file_path': LaunchConfiguration('map_file_path'),
             'lidar_delta_time': LaunchConfiguration('lidar_delta_time'),
+            'use_gps_time': LaunchConfiguration('gps_time_sync'),
         }.items(),
     )
 

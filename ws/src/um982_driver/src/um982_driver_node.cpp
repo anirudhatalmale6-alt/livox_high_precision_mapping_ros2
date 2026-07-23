@@ -9,6 +9,7 @@
 // the original APX-15 driver produced, so the mapping node needs no change.
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -46,6 +47,15 @@ public:
     // BOTH antennas connected with a good baseline fix.
     configure_heading_ = declare_parameter<bool>("configure_heading", true);
 
+    // Put the whole recording on satellite (GPS/UTC) time instead of the
+    // computer clock. When true the driver asks the receiver to stream RMC (for
+    // the UTC date+time), stamps NavSatFix with that satellite time, and
+    // publishes the (GPS - computer) clock offset on /gnss_inertial/time_offset
+    // so the mapping node can shift the LiDAR/IMU onto the same clock. Default
+    // false keeps the original computer-clock stamping, so nothing changes
+    // unless you opt in. See docs/time_sync.md.
+    gps_time_sync_ = declare_parameter<bool>("gps_time_sync", false);
+
     // RTCM correction source for RTK. "none" = standalone single-point fix
     // (metre-level). "ntrip" = pull corrections from an NTRIP caster over the
     // network (e.g. a state CORS network). "serial" = read a raw RTCM3 stream
@@ -73,6 +83,8 @@ public:
       "~/heading", rclcpp::SensorDataQoS());
     heading_deg_pub_ = create_publisher<std_msgs::msg::Float64>(
       "~/heading_deg", rclcpp::SensorDataQoS());
+    time_offset_pub_ = create_publisher<std_msgs::msg::Float64>(
+      "/gnss_inertial/time_offset", rclcpp::SensorDataQoS());
 
     RCLCPP_INFO(get_logger(), "UM982 driver starting on %s @ %d baud", port_.c_str(), baud_);
     running_ = true;
@@ -120,6 +132,10 @@ private:
       {
         configureReceiverHeading();
       }
+      if (gps_time_sync_)
+      {
+        configureTimeSync();
+      }
 
       std::string line;
       while (running_ && rclcpp::ok() && serial.isOpen())
@@ -154,6 +170,19 @@ private:
         }
       }
     }
+    else if (gps_time_sync_ && type == "RMC")
+    {
+      um982::RmcTime t = um982::parseRmc(line);
+      if (t.valid)
+      {
+        // Keep only the date (as Unix seconds at 00:00 UTC of that day). The
+        // per-fix time-of-day comes from the higher-rate GGA, which we combine
+        // with this date in publishNavSatFix.
+        have_date_ = true;
+        date_midnight_unix_ = t.unix_seconds - t.utc_seconds;
+        last_rmc_tod_ = t.utc_seconds;
+      }
+    }
     else if (publish_heading_ && (type == "HDT" || type == "UNIHEADINGA"))
     {
       um982::Heading h = um982::parseHeading(line);
@@ -164,10 +193,54 @@ private:
     }
   }
 
+  // Timestamp for a fix. Normally the computer clock; in GPS-time mode (and once
+  // a UTC date is known from RMC) it is the satellite time: the RMC date plus the
+  // GGA's own time-of-day. In that mode we also track and publish the
+  // (satellite - computer) clock offset so the mapper can move the LiDAR/IMU onto
+  // the same clock. Called only from the serial read thread.
+  rclcpp::Time computeStamp(const um982::GgaFix & fix)
+  {
+    rclcpp::Time host = now();
+    if (!gps_time_sync_ || !have_date_)
+    {
+      return host;
+    }
+    // Unpack the GGA hhmmss.ss field into seconds-of-day.
+    const double packed = fix.utc_seconds;
+    const int hh = static_cast<int>(packed / 10000.0);
+    const int mm = static_cast<int>((packed - hh * 10000.0) / 100.0);
+    const double ss = packed - hh * 10000.0 - mm * 100.0;
+    double sod = hh * 3600.0 + mm * 60.0 + ss;
+    // Guard a midnight rollover between the last RMC date and this GGA time.
+    if (sod < last_rmc_tod_ - 43200.0) { sod += 86400.0; }
+    else if (sod > last_rmc_tod_ + 43200.0) { sod -= 86400.0; }
+    const double t_sat = date_midnight_unix_ + sod;
+
+    // Track the offset with a slow EMA to reject per-message jitter, but SNAP to
+    // the new value on the first sample or a genuine clock step (>0.5 s jump), so
+    // a computer-clock step is corrected at once instead of smearing while the
+    // EMA slews toward it.
+    const double sample = t_sat - host.seconds();
+    if (!have_offset_ || std::fabs(sample - offset_ema_) > 0.5)
+    {
+      offset_ema_ = sample;
+    }
+    else
+    {
+      offset_ema_ = (1.0 - kOffsetAlpha) * offset_ema_ + kOffsetAlpha * sample;
+    }
+    have_offset_ = true;
+    std_msgs::msg::Float64 off;
+    off.data = offset_ema_;
+    time_offset_pub_->publish(off);
+
+    return rclcpp::Time(static_cast<int64_t>(std::llround(t_sat * 1e9)));
+  }
+
   void publishNavSatFix(const um982::GgaFix & fix)
   {
     sensor_msgs::msg::NavSatFix msg;
-    msg.header.stamp = now();
+    msg.header.stamp = computeStamp(fix);
     msg.header.frame_id = frame_id_;
 
     // Map the GGA fix quality onto NavSatStatus while also preserving the raw
@@ -422,6 +495,33 @@ private:
                 "Needs both antennas with a good baseline to produce a value.");
   }
 
+  // Ask the UM982 to stream RMC so we have the UTC date/time. Reuses the same
+  // writable handle as RTCM injection / heading config. Sent on every reconnect;
+  // no SAVECONFIG, so the receiver's stored settings are left untouched.
+  void configureTimeSync()
+  {
+    std::lock_guard<std::mutex> lk(writer_mtx_);
+    if (!writer_.isOpen())
+    {
+      try
+      {
+        writer_.open(port_, baud_, true);
+      }
+      catch (const std::exception & e)
+      {
+        RCLCPP_WARN(get_logger(), "Time-sync config: cannot open %s for write: %s",
+                    port_.c_str(), e.what());
+        return;
+      }
+    }
+    writer_.writeStr("LOG GPRMC ONTIME 1\r\n");
+    std::this_thread::sleep_for(100ms);
+    RCLCPP_INFO(get_logger(),
+                "GPS-time sync ON: requested RMC for UTC date/time. NavSatFix "
+                "will be stamped in satellite time and the clock offset published "
+                "on /gnss_inertial/time_offset.");
+  }
+
   std::string latestGga()
   {
     std::lock_guard<std::mutex> lk(gga_mtx_);
@@ -433,6 +533,15 @@ private:
   std::string frame_id_;
   bool publish_heading_ = true;
   bool configure_heading_ = true;
+  bool gps_time_sync_ = false;
+
+  // GPS-time bookkeeping (touched only on the serial read thread).
+  bool have_date_ = false;
+  double date_midnight_unix_ = 0.0;   // Unix seconds at 00:00 UTC of the RMC date
+  double last_rmc_tod_ = 0.0;         // last RMC time-of-day (for rollover guard)
+  bool have_offset_ = false;
+  double offset_ema_ = 0.0;           // smoothed (satellite - computer) seconds
+  static constexpr double kOffsetAlpha = 0.05;
 
   std::string rtcm_source_ = "none";
   std::string rtcm_serial_port_;
@@ -443,6 +552,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr navsat_pub_;
   rclcpp::Publisher<geometry_msgs::msg::QuaternionStamped>::SharedPtr heading_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr heading_deg_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr time_offset_pub_;
 
   std::unique_ptr<NtripClient> ntrip_;
   um982::SerialPort writer_;

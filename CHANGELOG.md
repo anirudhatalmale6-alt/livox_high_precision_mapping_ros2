@@ -210,6 +210,33 @@ rather the `.pcd` itself carry absolute UTM easting/northing so CloudCompare
 shows real-world coordinates directly, that can be enabled — ask and it's a
 small addition.
 
+## 13. Optional GPS-time sync — run the whole recording on satellite time (added later)
+
+By default every stream is stamped with the computer clock. That still gives a
+sharp map, because the LiDAR, its built-in IMU and the GPS are all stamped on
+the same machine, so they agree with each other. But the computer clock can be
+wrong in absolute terms, and worse, it can *jump* mid-run (drift, or a time
+service stepping it), which can disturb the alignment.
+
+There is now a switch to put everything on satellite (GPS/UTC) time instead:
+
+- One-command: `mapping_online.launch.py ... gps_time_sync:=true`
+- Split: `sensors.launch.py ... gps_time_sync:=true` AND
+  `mapping.launch.py ... use_gps_time:=true`
+
+How it works: the UM982 driver requests `RMC` for the UTC date/time, stamps
+`NavSatFix` in satellite time, and publishes the `(satellite − computer)` clock
+offset on `/gnss_inertial/time_offset`. The mapping node adds that offset to the
+LiDAR and IMU stamps, so all three land on one satellite clock. The offset is
+smoothed, so a wrong or jumping computer clock no longer affects the map, and
+the output carries true absolute timestamps.
+
+It's off by default (nothing changes unless you opt in), and it needs no OS
+setup or rewiring — see `docs/time_sync.md` section 0. The RMC date/time maths
+is unit-tested (`test_nmea_parser.cpp`, verified against `date -u`). Wiring the
+LiDAR's hardware PPS (docs sections 1–2) is still an optional extra on top, for
+the last slice of absolute precision.
+
 ---
 
 ## Where the detail lives

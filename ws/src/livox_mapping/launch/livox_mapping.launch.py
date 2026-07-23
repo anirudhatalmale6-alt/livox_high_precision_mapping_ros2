@@ -24,6 +24,10 @@ def generate_launch_description():
         'autosave_sec', default_value='15.0',
         description='Flush the map to its .pcd every N seconds while running so a '
                     'file always exists even after a hard kill. 0 disables.')
+    gps_time_arg = DeclareLaunchArgument(
+        'use_gps_time', default_value='false',
+        description='Shift LiDAR/IMU stamps onto satellite time using the offset '
+                    'the UM982 driver publishes (needs gps_time_sync:=true there).')
 
     mapping_node = Node(
         package='livox_mapping',
@@ -37,6 +41,8 @@ def generate_launch_description():
             'save_pcd': True,
             'autosave_sec': ParameterValue(
                 LaunchConfiguration('autosave_sec'), value_type=float),
+            'use_gps_time': ParameterValue(
+                LaunchConfiguration('use_gps_time'), value_type=bool),
         }],
     )
 
@@ -49,4 +55,5 @@ def generate_launch_description():
     )
 
     return LaunchDescription(
-        [rviz_arg, map_path_arg, delta_arg, autosave_arg, mapping_node, rviz_node])
+        [rviz_arg, map_path_arg, delta_arg, autosave_arg, gps_time_arg,
+         mapping_node, rviz_node])
