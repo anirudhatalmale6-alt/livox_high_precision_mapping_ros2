@@ -210,6 +210,12 @@ public:
     timer_ = create_wall_timer(
       std::chrono::milliseconds(10), std::bind(&LivoxMappingNode::processPending, this));
 
+    // Diagnostics heartbeat: until a map is actually building, say plainly what
+    // is (not) arriving, so a silent "no file" is impossible to misread. The
+    // mapper needs ALL THREE streams (LiDAR + IMU + GNSS) to fuse a single point.
+    diag_timer_ = create_wall_timer(
+      std::chrono::seconds(5), std::bind(&LivoxMappingNode::diagnostics, this));
+
     RCLCPP_INFO(get_logger(), "livox_mapping node ready (lidar_delta_time=%.4f).",
                 lidar_delta_time_);
   }
@@ -281,6 +287,61 @@ public:
       saveMap();
       last_save_ = nowt;
     }
+  }
+
+  // Periodic heartbeat while the node runs. Until the map is actually building,
+  // it spells out which of the three required streams is missing, so a run that
+  // produces no file never looks like a silent failure. Once points are flowing
+  // it announces success once and then goes quiet.
+  void diagnostics()
+  {
+    if (!accumulated_->empty())
+    {
+      if (!announced_flowing_)
+      {
+        RCLCPP_INFO(get_logger(),
+                    "Mapping is building: %zu points so far (LiDAR + IMU + GNSS all flowing).",
+                    accumulated_->size());
+        announced_flowing_ = true;
+      }
+      return;
+    }
+
+    std::string missing;
+    if (lidar_datas_.empty()) { missing += " LiDAR(/livox/lidar)"; }
+    if (imu_datas_.empty())   { missing += " IMU(/gnss_inertial/imu)"; }
+    if (rtk_datas_.empty())   { missing += " GNSS(/gnss_inertial/navsatfix)"; }
+
+    if (!missing.empty())
+    {
+      RCLCPP_WARN(get_logger(),
+                  "No map yet - not receiving:%s. All three are required; nothing "
+                  "will be saved until they arrive. Is the Livox driver running "
+                  "(and RTK/heading up)?",
+                  missing.c_str());
+    }
+    else
+    {
+      RCLCPP_WARN(get_logger(),
+                  "Receiving LiDAR(%zu) IMU(%zu) GNSS(%zu) but no points fused yet "
+                  "- check their timestamps overlap (1PPS/time sync).",
+                  lidar_datas_.size(), imu_datas_.size(), rtk_datas_.size());
+    }
+  }
+
+  // Final save on shutdown. Unlike the periodic saveMap(), this says out loud
+  // when there is nothing to write, so an empty run is never a silent no-file.
+  void finalSave()
+  {
+    if (accumulated_->empty())
+    {
+      RCLCPP_WARN(get_logger(),
+                  "Shutting down with an EMPTY map - no .pcd written because no "
+                  "LiDAR+IMU+GNSS data was fused this run. Was the Livox LiDAR "
+                  "driver running alongside this launch?");
+      return;
+    }
+    saveMap();
   }
 
 private:
@@ -573,6 +634,7 @@ private:
   double lla0_[3] = {0, 0, 0};
 
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr accumulated_;
+  bool announced_flowing_ = false;
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_lidar_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
@@ -581,6 +643,7 @@ private:
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odometry_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
 };
 
 int main(int argc, char ** argv)
@@ -588,7 +651,7 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   auto node = std::make_shared<LivoxMappingNode>();
   rclcpp::spin(node);
-  node->saveMap();
+  node->finalSave();
   rclcpp::shutdown();
   return 0;
 }

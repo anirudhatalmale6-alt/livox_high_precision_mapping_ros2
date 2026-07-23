@@ -158,6 +158,36 @@ The mapping node now flushes the map to disk **every 15 seconds while running**
 Tip: to stop a run, press Ctrl-C **once** and give it a few seconds — don't
 double-tap, which forces a hard kill. But even if you do, autosave has your map.
 
+## 11. Clear "why is there no file" diagnostics (added later)
+
+The mapper only writes a `.pcd` when it has actually fused points, and it needs
+**all three** streams to do that: LiDAR (`/livox/lidar`) + IMU
+(`/gnss_inertial/imu`) + GNSS (`/gnss_inertial/navsatfix`). If any one is
+missing — most commonly the **Livox LiDAR driver not being started** alongside
+the launch — nothing accumulates and, previously, the run just ended with no
+file and no explanation.
+
+The node now tells you what is happening:
+
+- **Every 5 s while running**, if no map is building yet, it prints exactly which
+  stream is missing, e.g. `No map yet - not receiving: LiDAR(/livox/lidar). ...
+  Is the Livox driver running?`. Once points start flowing it says so once.
+- **On shutdown with an empty map** it prints a plain warning that no `.pcd` was
+  written and why, instead of exiting silently.
+
+Note on the two launches — neither one starts the **Livox LiDAR driver**; that
+is always a separate launch (its own package/config). So:
+
+- `mapping_online.launch.py` starts UM982 + IMU adapter + mapper together, but
+  you must **also** have the Livox driver running in another terminal.
+- `mapping.launch.py` (split) starts only the mapper, so UM982, the IMU adapter,
+  **and** the Livox driver all run separately.
+
+Both then produce the **same single fused file**. There is no separate
+pointcloud/gnss/imu-to-combine-later step in this rewrite: position and attitude
+are baked into every point live, so the one `.pcd` you get out is already the
+finished georeferenced map.
+
 ---
 
 ## Where the detail lives
