@@ -71,7 +71,32 @@ python3 -m mapper_web.server --simulate --port 8080
 Everything works against simulated sensors and a virtual USB - handy for a demo
 or for developing the UI.
 
-## Run at boot (systemd)
+## Everything at boot - power on and go (recommended for the field)
 
-See `mapper_web.service` in this folder - installs the dashboard as a service so
-it comes up with the Pi.
+`field.launch.py` starts the whole unit with one command - LiDAR driver +
+sensors/RTK + dashboard:
+
+```bash
+ros2 launch mapper_web field.launch.py \
+    ntrip_host:=... ntrip_mountpoint:=... ntrip_user:=... ntrip_password:=...
+```
+
+To have it come up automatically on power-on, install the systemd service:
+
+```bash
+sudo cp mapper-field.service /etc/systemd/system/
+sudo mkdir -p /etc/mapper
+sudo cp field.env.example /etc/mapper/field.env
+sudo nano /etc/mapper/field.env        # your workspace path + NTRIP login
+sudo chmod 600 /etc/mapper/field.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now mapper-field
+```
+
+Now the Pi boots straight into a running unit - wait ~30 s, open
+`http://<pi-ip>:8080` or use the button. Your NTRIP login stays in
+`/etc/mapper/field.env` (root-only, never in git). Check it with
+`systemctl status mapper-field`.
+
+(`mapper_web.service` is the older dashboard-only service, if you'd rather start
+the LiDAR/sensors yourself.)
