@@ -32,8 +32,8 @@ class MapperState:
 
             # LiDAR device status (read-only indicators from the driver)
             'device': {
-                'work_mode': 'Power Saving',
-                'pps': 'No PPS',
+                'work_mode': 'Unknown',
+                'pps': 'Unknown',
                 'temperature': 'Unknown',
                 'voltage': 'Unknown',
                 'motor': 'Unknown',

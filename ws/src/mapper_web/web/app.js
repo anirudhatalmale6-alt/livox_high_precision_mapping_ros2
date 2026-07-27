@@ -48,6 +48,9 @@
     } else if (s.logging_state === 'idle' && s.last_map) {
       extra = 'last map: ' + s.last_map;
     }
+    if (s.logging_state === 'idle' && !(s.usb && s.usb.mounted && s.usb.free_gb >= 1)) {
+      extra = 'insert a USB drive to enable logging';
+    }
     $('logMsg').textContent = extra ? ' - ' + extra : '';
     var logging = (s.logging_state === 'active_logging' || s.logging_state === 'initial_data_logging');
     $('recDot').className = 'recdot' + (logging ? ' live' : '');

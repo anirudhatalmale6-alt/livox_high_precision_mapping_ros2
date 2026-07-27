@@ -41,7 +41,9 @@ class LoggingController:
             # Phase 1: initial data logging - spin the head up, run checks.
             self.s.update(logging_state=st.INITIAL,
                           log_message='Initial data logging - spinning up + checks')
-            self.s.merge('device', work_mode='Working Normally')
+            # TODO(next slice): command the LiDAR to Normal (spin up) here via
+            # the Livox control link. Until then work_mode stays 'Unknown'
+            # rather than a faked value.
             if self.led:
                 self.led.set_logging(True)
 
@@ -139,8 +141,8 @@ class LoggingController:
         self._proc = None
 
         last = self._collect_map()
-        # Spin the head back down into power saving.
-        self.s.merge('device', work_mode='Power Saving')
+        # TODO(next slice): command the LiDAR to Standby (spin down) here via
+        # the Livox control link.
         # Safely eject the USB so it can be pulled.
         if not self.simulate:
             self.usb.eject()

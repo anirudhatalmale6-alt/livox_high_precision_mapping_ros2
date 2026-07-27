@@ -206,7 +206,9 @@ def build_parser():
     p.add_argument('--led-green', type=int, default=20)
     p.add_argument('--led-blue', type=int, default=21)
     p.add_argument('--led-gpio', type=int, default=None)
-    p.add_argument('--require-rtk', action='store_true', default=True)
+    # Gate logging on an RTK fix. Default OFF so you can test/log on a plain GPS
+    # fix; turn ON for survey work where cm accuracy is required.
+    p.add_argument('--require-rtk', action='store_true', default=False)
     p.add_argument('--no-require-rtk', dest='require_rtk', action='store_false')
     p.add_argument('--on-fail', choices=['wait', 'abort'], default='wait')
     p.add_argument('--simulate', action='store_true',
