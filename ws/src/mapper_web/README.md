@@ -40,6 +40,14 @@ Optional, for the GPIO button + LED on the Pi:
 sudo apt install python3-gpiozero
 ```
 
+So SHUTDOWN / RESTART (web button and the 8-9 s button hold) don't prompt for a
+password, run this once (not needed if you use the boot service - it runs as
+root):
+
+```bash
+sh src/mapper_web/scripts/allow-poweroff.sh
+```
+
 (No Flask/FastAPI needed - the server is pure Python standard library.)
 
 ## Run

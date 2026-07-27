@@ -16,7 +16,6 @@
 import argparse
 import json
 import os
-import subprocess
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -135,12 +134,8 @@ class Handler(BaseHTTPRequestHandler):
     def _system(self, action):
         if self.app.opts.simulate:
             return True, action + ' (sim)'
-        cmd = ['sudo', 'shutdown', '-r' if action == 'reboot' else '-h', 'now']
-        try:
-            subprocess.Popen(cmd)
-            return True, action + ' issued'
-        except OSError as e:
-            return False, str(e)
+        from .power import power_off
+        return power_off(reboot=(action == 'reboot'))
 
     def _read_body(self):
         n = int(self.headers.get('Content-Length', 0) or 0)

@@ -8,7 +8,6 @@
 # screen. Active-low by default (button wired GPIO26 -> GND, internal pull-up).
 #
 # Uses gpiozero if present; otherwise a no-op stub so the service runs off-Pi.
-import subprocess
 import threading
 import time
 
@@ -69,10 +68,8 @@ class PushButton:
         # < LOG_MIN: ignored as an accidental tap
 
     def _shutdown(self):
-        try:
-            subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
-        except OSError:
-            pass
+        from .power import power_off
+        power_off(reboot=False)
 
     # ---- test / simulate hook --------------------------------------------
     def simulate_hold(self, seconds):
