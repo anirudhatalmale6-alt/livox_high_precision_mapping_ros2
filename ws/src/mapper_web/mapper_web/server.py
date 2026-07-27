@@ -108,6 +108,8 @@ class Handler(BaseHTTPRequestHandler):
                 ok, msg = self._apply_config(body)
             elif path == '/api/usb/check':
                 self.app.refresh_usb(); ok, msg = True, 'checked'
+            elif path == '/api/usb/attach':
+                ok, msg = self.app.usb.mount(); self.app.refresh_usb()
             elif path == '/api/usb/detach':
                 ok, msg = self.app.usb.eject(); self.app.refresh_usb()
             elif path == '/api/usb/format':
@@ -198,7 +200,7 @@ def build_parser():
     p.add_argument('--host', default='0.0.0.0')
     p.add_argument('--port', type=int, default=8080)
     p.add_argument('--workspace', default='/opt/mapper/ws')
-    p.add_argument('--mount-point', default='/media/log')
+    p.add_argument('--mount-point', default='')
     p.add_argument('--button-gpio', type=int, default=26)
     # RGB status LED (client's wiring: R=16 G=20 B=21). Use --led-gpio instead
     # for a single-colour LED.

@@ -1,50 +1,68 @@
 # USB storage manager - the logging target.
 #
-# Detects the mounted USB stick, reports capacity, and safely mounts / unmounts
-# / formats it. Logs are written here, never on the Pi's SD card.
+# Auto-detects the USB stick wherever the system put it (desktop auto-mount
+# lands it at /media/<user>/<label>, not a fixed path), reports capacity, and
+# safely mounts / unmounts / formats it. Logs are written to the stick, never
+# the Pi's SD card.
 #
-# The mount point defaults to /media/log. On the field Pi we expect the drive to
-# auto-mount there (via /etc/fstab or udisks). Everything degrades gracefully so
-# the service still runs on a dev box with no USB attached (simulation).
+# Detection is by block device, not by a hardcoded mount point, so "just plug it
+# in" works. Everything degrades gracefully so the service still runs on a box
+# with no USB attached (simulation).
+import json
 import os
 import shutil
 import subprocess
 
 
 class UsbManager:
-    def __init__(self, mount_point='/media/log', device_hint='', simulate=False):
-        self.mount_point = mount_point
-        self.device_hint = device_hint      # e.g. /dev/sda1; auto-detect if empty
+    def __init__(self, mount_point='', device_hint='', simulate=False):
+        self.fallback_mount = mount_point   # only used if auto-detect finds nothing
+        self.device_hint = device_hint      # force a device, e.g. /dev/sda1
         self.simulate = simulate
         self._sim = {
             'present': True, 'mounted': True, 'label': 'SIM-USB',
             'total_gb': 128.0, 'free_gb': 80.6, 'free_pct': 63,
-            'path': mount_point,
+            'path': '/media/log', 'device': '/dev/sda1',
         }
 
     # ---- status -----------------------------------------------------------
     def status(self):
         if self.simulate:
             return dict(self._sim)
-        mounted = os.path.ismount(self.mount_point)
-        info = {
-            'present': mounted, 'mounted': mounted, 'label': '-',
-            'total_gb': 0.0, 'free_gb': 0.0, 'free_pct': 0,
-            'path': self.mount_point if mounted else '',
-        }
-        if mounted:
-            try:
-                u = shutil.disk_usage(self.mount_point)
-                info['total_gb'] = round(u.total / 1e9, 1)
-                info['free_gb'] = round(u.free / 1e9, 1)
-                info['free_pct'] = int(u.free * 100 / u.total) if u.total else 0
-                info['label'] = self._label()
-            except OSError:
-                pass
-        else:
-            # drive may be inserted but not mounted yet
-            info['present'] = bool(self._device())
+        f = self._find()
+        info = {'present': False, 'mounted': False, 'label': '-',
+                'total_gb': 0.0, 'free_gb': 0.0, 'free_pct': 0,
+                'path': '', 'device': ''}
+        if not f:
+            # last resort: an explicit mount point that's actually mounted
+            if self.fallback_mount and os.path.ismount(self.fallback_mount):
+                return self._usage({'present': True, 'mounted': True,
+                                    'label': 'USB', 'path': self.fallback_mount,
+                                    'device': ''})
+            return info
+        info['present'] = True
+        info['device'] = f['device']
+        info['label'] = f['label'] or 'USB'
+        if f['mountpoint']:
+            info['mounted'] = True
+            info['path'] = f['mountpoint']
+            info = self._usage(info)
         return info
+
+    def _usage(self, info):
+        try:
+            u = shutil.disk_usage(info['path'])
+            info['total_gb'] = round(u.total / 1e9, 1)
+            info['free_gb'] = round(u.free / 1e9, 1)
+            info['free_pct'] = int(u.free * 100 / u.total) if u.total else 0
+        except OSError:
+            pass
+        return info
+
+    def logging_dir(self):
+        """Where a run should write - the live USB mount, or '' if none."""
+        s = self.status()
+        return s['path'] if s['mounted'] else ''
 
     def healthy_for_logging(self, min_free_gb=1.0):
         s = self.status()
@@ -55,12 +73,20 @@ class UsbManager:
         if self.simulate:
             self._sim['mounted'] = True
             return True, 'mounted (sim)'
-        dev = self._device()
+        f = self._find()
+        dev = self.device_hint or (f['device'] if f else '')
         if not dev:
             return False, 'no USB device found'
-        os.makedirs(self.mount_point, exist_ok=True)
-        rc, out = self._run(['mount', dev, self.mount_point])
-        return rc == 0, out or 'mounted'
+        if f and f['mountpoint']:
+            return True, 'already mounted at ' + f['mountpoint']
+        # udisksctl mounts as the desktop user (auto path); fall back to mount.
+        rc, out = self._run(['udisksctl', 'mount', '-b', dev])
+        if rc == 0:
+            return True, out.strip() or 'mounted'
+        mp = self.fallback_mount or '/media/log'
+        os.makedirs(mp, exist_ok=True)
+        rc, out = self._run(['mount', dev, mp])
+        return rc == 0, out.strip() or ('mounted at ' + mp)
 
     def eject(self):
         """Flush and unmount so the stick is safe to physically pull."""
@@ -68,8 +94,18 @@ class UsbManager:
             self._sim['mounted'] = False
             return True, 'ejected (sim)'
         self._run(['sync'])
-        rc, out = self._run(['umount', self.mount_point])
-        return rc == 0, out or 'ejected'
+        f = self._find()
+        dev = self.device_hint or (f['device'] if f else '')
+        if dev:
+            rc, out = self._run(['udisksctl', 'unmount', '-b', dev])
+            if rc == 0:
+                return True, out.strip() or 'ejected'
+        # fall back to unmounting by path
+        path = (f['mountpoint'] if f else '') or self.fallback_mount
+        if path:
+            rc, out = self._run(['umount', path])
+            return rc == 0, out.strip() or 'ejected'
+        return False, 'no USB to eject'
 
     def format(self, label='LOGDATA'):
         """Erase the drive (vfat). Destructive - callers must confirm first."""
@@ -77,38 +113,59 @@ class UsbManager:
             self._sim['free_gb'] = self._sim['total_gb']
             self._sim['free_pct'] = 100
             return True, 'formatted (sim)'
-        dev = self._device()
+        f = self._find()
+        dev = self.device_hint or (f['device'] if f else '')
         if not dev:
             return False, 'no USB device found'
-        if os.path.ismount(self.mount_point):
-            self._run(['umount', self.mount_point])
+        if f and f['mountpoint']:
+            self._run(['udisksctl', 'unmount', '-b', dev])
         rc, out = self._run(['mkfs.vfat', '-F', '32', '-n', label, dev])
         if rc == 0:
             self.mount()
-        return rc == 0, out or 'formatted'
+        return rc == 0, out.strip() or 'formatted'
 
-    # ---- helpers ----------------------------------------------------------
-    def _device(self):
-        if self.device_hint:
-            return self.device_hint if os.path.exists(self.device_hint) else ''
-        # pick the first USB partition reported by lsblk
-        rc, out = self._run(['lsblk', '-rno', 'NAME,TRAN,TYPE'])
+    # ---- detection --------------------------------------------------------
+    def _find(self):
+        """Return {device, mountpoint, label, fstype} for the best USB
+        partition, or None. Auto-detects via lsblk - no fixed mount path."""
+        rc, out = self._run(['lsblk', '-J', '-b', '-o',
+                             'NAME,TYPE,TRAN,RM,HOTPLUG,MOUNTPOINT,SIZE,LABEL,FSTYPE'])
         if rc != 0:
-            return ''
-        for line in out.splitlines():
-            f = line.split()
-            if len(f) >= 3 and f[1] == 'usb' and f[2] == 'part':
-                return '/dev/' + f[0]
-        return ''
+            return None
+        try:
+            tree = json.loads(out).get('blockdevices', [])
+        except ValueError:
+            return None
 
-    def _label(self):
-        rc, out = self._run(['lsblk', '-rno', 'LABEL', self._device()]) if self._device() else (1, '')
-        return out.strip() or 'USB'
+        best = None
+        for disk in tree:
+            if disk.get('type') != 'disk':
+                continue
+            removable = (disk.get('tran') == 'usb'
+                         or str(disk.get('hotplug')) in ('1', 'True', 'true')
+                         or str(disk.get('rm')) in ('1', 'True', 'true'))
+            if not removable:
+                continue
+            # candidate partitions with a filesystem (or a whole-disk fs)
+            cands = [c for c in disk.get('children', []) if c.get('fstype')]
+            if not cands and disk.get('fstype'):
+                cands = [disk]
+            # prefer a mounted candidate, else the first with a filesystem
+            cands.sort(key=lambda c: (0 if c.get('mountpoint') else 1))
+            for c in cands:
+                cand = {'device': '/dev/' + c['name'],
+                        'mountpoint': c.get('mountpoint') or '',
+                        'label': c.get('label') or '',
+                        'fstype': c.get('fstype') or ''}
+                if cand['mountpoint']:
+                    return cand           # a mounted USB fs is the winner
+                best = best or cand        # remember an unmounted one
+        return best
 
     @staticmethod
     def _run(cmd):
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            return p.returncode, (p.stdout or p.stderr).strip()
+            return p.returncode, (p.stdout or p.stderr)
         except (subprocess.SubprocessError, FileNotFoundError) as e:
             return 1, str(e)

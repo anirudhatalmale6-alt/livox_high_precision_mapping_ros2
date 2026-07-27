@@ -82,7 +82,6 @@ class LoggingController:
             if self.on_fail == 'abort' or time.time() > deadline:
                 self.s.update(logging_state=st.IDLE,
                               log_message='Start aborted - ' + ', '.join(missing) + ' not ready')
-                self.s.merge('device', work_mode='Power Saving')
                 if self.led:
                     self.led.error_blink()
                     self.led.set_logging(False)
@@ -103,10 +102,12 @@ class LoggingController:
         prefix = ''
         if self.workspace and not shutil.which('ros2'):
             prefix = 'source {ws}/install/setup.bash && '.format(ws=self.workspace)
+        # write to wherever the USB is actually mounted (auto-detected)
+        self._active_dir = self.usb.logging_dir() or self.mount_point or os.getcwd()
         cmd = (prefix +
                'ros2 launch livox_hp_mapping_bringup mapping.launch.py '
                'rviz:=false use_gps_time:=true map_file_path:={mp}'
-               ).format(mp=self.mount_point)
+               ).format(mp=self._active_dir)
         try:
             self._proc = subprocess.Popen(
                 ['bash', '-c', cmd], env=os.environ.copy(), preexec_fn=os.setsid)
@@ -156,17 +157,19 @@ class LoggingController:
         """Move the freshest .pcd (+ .geo.txt) onto the USB, return its name."""
         if self.simulate:
             return time.strftime('livox_map_%Y-%m-%d_%H-%M-%S.pcd')
+        dest = getattr(self, '_active_dir', '') or self.usb.logging_dir()
         try:
-            pcds = sorted(glob.glob(os.path.join(self.mount_point, '*.pcd')) +
+            pcds = sorted(glob.glob(os.path.join(dest, '*.pcd')) +
                           glob.glob('*.pcd'), key=os.path.getmtime)
             if not pcds:
                 return None
             newest = pcds[-1]
-            if os.path.dirname(newest) != self.mount_point and os.path.ismount(self.mount_point):
+            if dest and os.path.dirname(newest) != dest and os.path.isdir(dest):
                 for ext in ('', '.geo.txt'):
                     src = newest + ext if ext else newest
                     if os.path.exists(src):
-                        shutil.move(src, os.path.join(self.mount_point, os.path.basename(src)))
+                        shutil.move(src, os.path.join(dest, os.path.basename(src)))
+                newest = os.path.join(dest, os.path.basename(newest))
             return os.path.basename(newest)
         except OSError:
             return None

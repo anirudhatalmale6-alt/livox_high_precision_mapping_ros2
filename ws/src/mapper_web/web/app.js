@@ -107,7 +107,7 @@
   $('btnApply').onclick = function () {
     post('/api/config', { echo_type: $('cfgEcho').value, work_mode: $('cfgWork').value });
   };
-  $('btnUsbCheck').onclick = function () { post('/api/usb/check'); };
+  $('btnUsbAttach').onclick = function () { post('/api/usb/attach'); };
   $('btnUsbDetach').onclick = function () {
     confirmPost('/api/usb/detach', 'Safely eject the USB drive?');
   };
