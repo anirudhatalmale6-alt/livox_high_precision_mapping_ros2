@@ -215,7 +215,13 @@ def build_parser():
 
 
 def main(argv=None):
-    opts = build_parser().parse_args(argv)
+    import sys
+    raw = list(sys.argv[1:] if argv is None else argv)
+    # ros2 launch appends "--ros-args -r __node:=..." - strip it so argparse
+    # (and this non-rclpy main process) doesn't choke on ROS remap args.
+    if '--ros-args' in raw:
+        raw = raw[:raw.index('--ros-args')]
+    opts, _unknown = build_parser().parse_known_args(raw)
     if os.environ.get('MAPPER_SIMULATE') == '1':
         opts.simulate = True
     app = App(opts)

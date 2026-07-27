@@ -94,14 +94,20 @@ class LoggingController:
             self._proc = 'SIM'
             self.s.merge('lidar', ok=True, rate_hz=10.0)
             return True
-        cmd = ('source /opt/ros/humble/setup.bash && '
-               'source {ws}/install/setup.bash && '
+        # The dashboard is itself launched from a sourced workspace, so the
+        # child inherits ROS_DISTRO / AMENT_PREFIX_PATH and can find ros2 and
+        # the bringup package directly - no hardcoded workspace path needed.
+        # If --workspace is given and ros2 isn't already on PATH, source it.
+        prefix = ''
+        if self.workspace and not shutil.which('ros2'):
+            prefix = 'source {ws}/install/setup.bash && '.format(ws=self.workspace)
+        cmd = (prefix +
                'ros2 launch livox_hp_mapping_bringup mapping.launch.py '
                'rviz:=false use_gps_time:=true map_file_path:={mp}'
-               ).format(ws=self.workspace, mp=self.mount_point)
+               ).format(mp=self.mount_point)
         try:
             self._proc = subprocess.Popen(
-                ['bash', '-lc', cmd], preexec_fn=os.setsid)
+                ['bash', '-c', cmd], env=os.environ.copy(), preexec_fn=os.setsid)
             return True
         except OSError as e:
             self.s.update(logging_state=st.IDLE, log_message='Launch failed: ' + str(e))
