@@ -11,3 +11,8 @@ map_perspective.png
 map_perspective.jpg
 all_points.pcd
 *.pcd
+
+# client-supplied reference material + private survey location (do not publish)
+*.JPG
+sync cable *.jpg
+*.geo.txt

@@ -239,6 +239,32 @@ the last slice of absolute precision.
 
 ---
 
+## 14. Field control dashboard + GPIO button (`mapper_web`)
+
+A new package that lets you run the mapper from a phone or laptop - no
+terminals, no SSH - plus a physical pushbutton on GPIO 26.
+
+- **One-touch logging**, from the web page or the button. Start spins the laser
+  head up out of power-saving, runs data checks (USB mounted + LiDAR + IMU +
+  RTK fix), then records. Stop saves the `.pcd` (+ `.geo.txt`), spins the head
+  down, and safely ejects the USB. The button and the web page drive the *same*
+  logging service, so they can never disagree.
+- **GPIO 26 pushbutton**: hold 3-4 s to start/stop, hold 8-9 s to shut down.
+  Optional status LED for feedback on a screenless unit.
+- **Live status**: LiDAR/IMU streaming rates, GNSS fix + sats, and the LiDAR
+  device indicators (work mode, PPS, temperature, voltage, motor, dust, service
+  life).
+- **LiDAR config** (echo/return type, work mode) and **USB storage** (mount,
+  free space, safe detach, format). Logs always go to USB, never the SD card.
+- Pure Python standard library - no Flask/FastAPI to install on the Pi. Runs at
+  boot via the included systemd unit. `--simulate` runs the whole thing with no
+  hardware for demos/dev. See [`ws/src/mapper_web/README.md`](ws/src/mapper_web/README.md).
+
+Visualisation (colour by height/depth/reflectivity, point size) is done
+afterwards in CloudCompare - that data is all inside the `.pcd`.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message

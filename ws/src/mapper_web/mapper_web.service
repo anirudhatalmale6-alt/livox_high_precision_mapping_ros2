@@ -1,0 +1,25 @@
+# Mapper web dashboard as a systemd service (starts with the Pi).
+#
+# Install:
+#   sudo cp mapper_web.service /etc/systemd/system/
+#   # edit the paths/user below to match your setup, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mapper_web
+#
+# The button and shutdown need root (GPIO + shutdown), so this runs as root.
+[Unit]
+Description=Livox mapper web dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust ROS distro and workspace path to your unit.
+Environment=ROS_DOMAIN_ID=0
+ExecStart=/bin/bash -lc 'source /opt/ros/humble/setup.bash && source /opt/mapper/ws/install/setup.bash && ros2 launch mapper_web dashboard.launch.py led_gpio:=19'
+Restart=on-failure
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

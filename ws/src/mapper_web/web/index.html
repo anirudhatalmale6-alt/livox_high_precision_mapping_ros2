@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiDAR Mapper - Control Panel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">&#9672;</div>
+      <div>
+        <h1>LiDAR Mapper &mdash; Control Panel</h1>
+        <div class="sub">Avia &middot; UM982 RTK &middot; Raspberry Pi field unit</div>
+      </div>
+    </div>
+    <div class="conn"><span class="dot" id="connDot"></span> <span id="connText">Connecting&hellip;</span></div>
+  </header>
+
+  <div class="grid">
+
+    <!-- CONTROLS -->
+    <div class="card">
+      <h2>Controls</h2>
+      <div class="body">
+        <div class="row2">
+          <button class="btn grn" id="btnStart">START LOGGING</button>
+          <button class="btn red ghost" id="btnStop">STOP LOGGING</button>
+        </div>
+        <div class="row2" style="margin-top:10px">
+          <button class="btn slate" id="btnRestart">SYSTEM RESTART</button>
+          <button class="btn red" id="btnShutdown">SYSTEM SHUTDOWN</button>
+        </div>
+        <div class="rec"><span class="recdot" id="recDot"></span> <b id="logState">Idle</b>
+          <span id="logMsg" class="muted"></span></div>
+      </div>
+    </div>
+
+    <!-- DEVICE STATUS -->
+    <div class="card">
+      <h2>Device Status</h2>
+      <div class="body">
+        <div class="kv">
+          <div class="ind"><span class="lab">LiDAR stream</span><span class="pill" id="stLidar">&mdash;</span></div>
+          <div class="ind"><span class="lab">INS / IMU</span><span class="pill" id="stImu">&mdash;</span></div>
+          <div class="ind"><span class="lab">GNSS</span><span class="pill" id="stGnss">&mdash;</span></div>
+          <div class="ind"><span class="lab">Work Mode</span><span class="pill" id="stWork">&mdash;</span></div>
+          <div class="ind"><span class="lab">PPS Signal</span><span class="pill" id="stPps">&mdash;</span></div>
+          <div class="ind"><span class="lab">Temperature</span><span class="pill" id="stTemp">&mdash;</span></div>
+          <div class="ind"><span class="lab">Voltage</span><span class="pill" id="stVolt">&mdash;</span></div>
+          <div class="ind"><span class="lab">Motor</span><span class="pill" id="stMotor">&mdash;</span></div>
+          <div class="ind"><span class="lab">Dust Warning</span><span class="pill" id="stDust">&mdash;</span></div>
+          <div class="ind"><span class="lab">Service Life</span><span class="pill" id="stLife">&mdash;</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONFIG -->
+    <div class="card">
+      <h2>LiDAR Configuration</h2>
+      <div class="body">
+        <div class="fld"><label>Echo / Return Type</label>
+          <select id="cfgEcho">
+            <option>Single - First Return</option>
+            <option>Single - Strongest Return</option>
+            <option>Double Return</option>
+            <option>Triple Return</option>
+          </select></div>
+        <div class="fld"><label>Work Mode</label>
+          <select id="cfgWork">
+            <option>Working Normally</option>
+            <option>Standby</option>
+            <option>Power Saving</option>
+          </select></div>
+        <div style="margin-top:12px"><button class="btn grn" id="btnApply" style="padding:10px">APPLY CONFIG</button></div>
+      </div>
+    </div>
+
+    <!-- USB -->
+    <div class="card">
+      <h2>Storage / USB &mdash; logging target</h2>
+      <div class="body">
+        <div>
+          <b id="usbLabel">No drive</b> &nbsp;<span class="pill" id="usbState">&mdash;</span>
+          <div class="muted" id="usbFree" style="margin-top:4px">&mdash;</div>
+          <div class="bar"><i id="usbBar" style="width:0%"></i></div>
+        </div>
+        <div class="row3" style="margin-top:12px">
+          <button class="btn slate" id="btnUsbCheck" style="padding:10px">CHECK</button>
+          <button class="btn slate" id="btnUsbDetach" style="padding:10px">DETACH</button>
+          <button class="btn red ghost" id="btnUsbFormat" style="padding:10px">FORMAT</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="foot">Button on GPIO 26: hold 3-4 s to start / stop &middot; hold 8-9 s to shut down.
+    Visualize maps afterward in CloudCompare.</div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
