@@ -17,7 +17,10 @@ def generate_launch_description():
         DeclareLaunchArgument('port', default_value='8080'),
         DeclareLaunchArgument('mount_point', default_value='/media/log'),
         DeclareLaunchArgument('button_gpio', default_value='26'),
-        DeclareLaunchArgument('led_gpio', default_value=''),
+        # RGB status LED pins (client's wiring: R=16, G=20, B=21).
+        DeclareLaunchArgument('led_red', default_value='16'),
+        DeclareLaunchArgument('led_green', default_value='20'),
+        DeclareLaunchArgument('led_blue', default_value='21'),
         DeclareLaunchArgument('workspace', default_value='/opt/mapper/ws'),
         DeclareLaunchArgument('require_rtk', default_value='true'),
         DeclareLaunchArgument('on_fail', default_value='wait'),
@@ -28,6 +31,9 @@ def generate_launch_description():
         '--port', LaunchConfiguration('port'),
         '--mount-point', LaunchConfiguration('mount_point'),
         '--button-gpio', LaunchConfiguration('button_gpio'),
+        '--led-red', LaunchConfiguration('led_red'),
+        '--led-green', LaunchConfiguration('led_green'),
+        '--led-blue', LaunchConfiguration('led_blue'),
         '--workspace', LaunchConfiguration('workspace'),
         '--on-fail', LaunchConfiguration('on_fail'),
     ]

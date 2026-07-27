@@ -12,7 +12,10 @@ SSH. A small web dashboard on the Pi plus a physical pushbutton on GPIO 26.
   records to the USB stick. Stop saves the `.pcd` (+ `.geo.txt`), spins the head
   back down, and safely ejects the USB.
 - **GPIO 26 pushbutton** - hold **3-4 s** to start/stop, hold **8-9 s** to shut
-  the Pi down. Optional status LED gives feedback for a screenless field unit.
+  the Pi down. An **RGB status LED** (default GPIO 16/20/21 = R/G/B) shows state
+  at a glance: solid green = idle & ready, solid red = not ready (no USB), blink
+  yellow = spinning up / stopping, blink blue = recording, double green = button
+  logging-armed, double red = shutdown-armed.
 - **Live status** - LiDAR / IMU streaming rates, GNSS fix + sats, and the LiDAR
   device indicators (work mode, PPS, temperature, voltage, motor, dust, service
   life).
@@ -55,7 +58,7 @@ Useful launch args:
 | `port` | `8080` | web port |
 | `mount_point` | `/media/log` | USB logging target |
 | `button_gpio` | `26` | pushbutton pin |
-| `led_gpio` | *(none)* | status LED pin (set to enable) |
+| `led_red` / `led_green` / `led_blue` | `16` / `20` / `21` | RGB status LED pins |
 | `on_fail` | `wait` | `wait` = retry checks, `abort` = cancel start if a sensor isn't ready |
 | `simulate` | `false` | run with no ROS2/GPIO/USB (dev + demo) |
 

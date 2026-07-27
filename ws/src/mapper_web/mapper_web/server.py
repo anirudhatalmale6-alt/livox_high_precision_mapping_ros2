@@ -53,7 +53,9 @@ class App:
         self.opts = opts
         self.state = MapperState()
         self.usb = UsbManager(mount_point=opts.mount_point, simulate=opts.simulate)
-        self.led = StatusLed(pin=opts.led_gpio)
+        self.led = StatusLed(red=opts.led_red, green=opts.led_green,
+                             blue=opts.led_blue, mono=opts.led_gpio,
+                             shared=self.state)
         self.ctl = LoggingController(
             self.state, self.usb, led=self.led, simulate=opts.simulate,
             workspace=opts.workspace, mount_point=opts.mount_point,
@@ -198,6 +200,11 @@ def build_parser():
     p.add_argument('--workspace', default='/opt/mapper/ws')
     p.add_argument('--mount-point', default='/media/log')
     p.add_argument('--button-gpio', type=int, default=26)
+    # RGB status LED (client's wiring: R=16 G=20 B=21). Use --led-gpio instead
+    # for a single-colour LED.
+    p.add_argument('--led-red', type=int, default=16)
+    p.add_argument('--led-green', type=int, default=20)
+    p.add_argument('--led-blue', type=int, default=21)
     p.add_argument('--led-gpio', type=int, default=None)
     p.add_argument('--require-rtk', action='store_true', default=True)
     p.add_argument('--no-require-rtk', dest='require_rtk', action='store_false')
