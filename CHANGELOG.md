@@ -254,8 +254,13 @@ terminals, no SSH - plus a physical pushbutton on GPIO 26.
 - **Live status**: LiDAR/IMU streaming rates, GNSS fix + sats, and the LiDAR
   device indicators (work mode, PPS, temperature, voltage, motor, dust, service
   life).
-- **LiDAR config** (echo/return type, work mode) and **USB storage** (mount,
-  free space, safe detach, format). Logs always go to USB, never the SD card.
+- **LiDAR config**: echo/return type, work mode, IMU push frequency, scanning
+  mode (non-repetitive/repetitive), coordinate type (Cartesian/Spherical) and
+  high sensitivity - each maps to a Livox SDK call, applied via the driver
+  control link. **RTK correction source** (Serial / NTRIP / MavLink) is
+  selectable too, persisted and applied on the next restart. **USB storage**
+  (mount, free space, safe detach, format) - logs always go to USB, never the
+  SD card.
 - Pure Python standard library - no Flask/FastAPI to install on the Pi. Runs at
   boot via the included systemd unit. `--simulate` runs the whole thing with no
   hardware for demos/dev. See [`ws/src/mapper_web/README.md`](ws/src/mapper_web/README.md).

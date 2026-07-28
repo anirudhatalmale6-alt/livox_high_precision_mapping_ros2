@@ -19,7 +19,10 @@ SSH. A small web dashboard on the Pi plus a physical pushbutton on GPIO 26.
 - **Live status** - LiDAR / IMU streaming rates, GNSS fix + sats, and the LiDAR
   device indicators (work mode, PPS, temperature, voltage, motor, dust, service
   life).
-- **LiDAR config** - echo/return type and work mode, applied to the device.
+- **LiDAR config** - echo/return type, work mode, IMU push frequency, scanning
+  mode, coordinate type and high sensitivity, applied to the device via the
+  driver control link. Plus an **RTK correction source** selector (Serial /
+  NTRIP / MavLink), persisted and applied on the next restart.
 - **USB storage** - mount state, free space, safe detach, format. Logs always
   go to USB, never the Pi's SD card.
 
