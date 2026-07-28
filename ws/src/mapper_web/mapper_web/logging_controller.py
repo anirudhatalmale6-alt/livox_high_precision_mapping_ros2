@@ -29,6 +29,9 @@ class LoggingController:
         self.on_fail = on_fail                # 'wait' (retry) or 'abort'
         self._proc = None
         self._lock = threading.Lock()
+        # Wired by the LiDAR control link once the forked driver is running: a
+        # callable(dict) -> (ok, msg) that pushes settings to the Avia via SDK.
+        self._config_sink = None
 
     def is_logging(self):
         return self.s.get('logging_state') in (st.INITIAL, st.ACTIVE)
@@ -173,6 +176,26 @@ class LoggingController:
             return os.path.basename(newest)
         except OSError:
             return None
+
+    # ---- LiDAR config -----------------------------------------------------
+    def apply_lidar_config(self, cfg):
+        """Push echo/IMU/scan/coordinate/sensitivity/work-mode to the Avia.
+
+        The actual SDK calls live in the forked livox driver (the control
+        link). When that's running it registers a sink via set_config_sink();
+        until then we honestly report that the values are saved and will apply
+        once the control link is up, rather than pretending the device changed.
+        """
+        if self._config_sink is not None:
+            try:
+                return self._config_sink(cfg)
+            except Exception as e:               # never crash the request
+                return False, 'LiDAR did not accept config: ' + str(e)
+        return True, ('saved - applies once the LiDAR control link is running '
+                      'on the device')
+
+    def set_config_sink(self, fn):
+        self._config_sink = fn
 
     # ---- toggle (button) --------------------------------------------------
     def toggle(self):

@@ -74,7 +74,42 @@
             <option>Standby</option>
             <option>Power Saving</option>
           </select></div>
+        <div class="fld"><label>IMU Push Frequency</label>
+          <select id="cfgImu">
+            <option>200 Hz</option>
+            <option>0 (off)</option>
+          </select></div>
+        <div class="fld"><label>Scanning Mode</label>
+          <select id="cfgScan">
+            <option>Non-repetitive (Circular)</option>
+            <option>Repetitive (Line)</option>
+          </select></div>
+        <div class="fld"><label>Coordinate Type</label>
+          <select id="cfgCoord">
+            <option>Cartesian</option>
+            <option>Spherical</option>
+          </select></div>
+        <div class="fld"><label>High Sensitivity</label>
+          <select id="cfgHiSens">
+            <option>Enabled</option>
+            <option>Disabled</option>
+          </select></div>
         <div style="margin-top:12px"><button class="btn grn" id="btnApply" style="padding:10px">APPLY CONFIG</button></div>
+      </div>
+    </div>
+
+    <!-- RTK / CORRECTION SOURCE -->
+    <div class="card">
+      <h2>RTK Correction Source</h2>
+      <div class="body">
+        <div class="fld"><label>Source of RTK data</label>
+          <select id="cfgRtk">
+            <option>NTRIP</option>
+            <option>Serial</option>
+            <option>MavLink</option>
+          </select></div>
+        <div class="muted" style="margin-top:2px">How the UM982 receives RTK corrections. Applies on the next system restart.</div>
+        <div style="margin-top:12px"><button class="btn grn" id="btnApplyRtk" style="padding:10px">APPLY SOURCE</button></div>
       </div>
     </div>
 

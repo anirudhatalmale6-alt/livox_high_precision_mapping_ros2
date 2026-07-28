@@ -46,6 +46,12 @@ class MapperState:
             'config': {
                 'echo_type': 'Single - First Return',
                 'work_mode': 'Working Normally',
+                'imu_freq': '200 Hz',
+                'scan_mode': 'Non-repetitive (Circular)',
+                'coordinate': 'Cartesian',
+                'high_sensitivity': 'Enabled',
+                # correction-data source for the UM982 RTK (GNSS bringup)
+                'rtk_source': 'NTRIP',
             },
 
             # USB / logging target

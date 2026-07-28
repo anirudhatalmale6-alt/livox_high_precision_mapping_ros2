@@ -84,6 +84,22 @@
          u.mounted ? 'ok' : 'bad');
     $('usbFree').textContent = u.mounted ? (u.free_pct + '% free - ' + u.free_gb + ' GB of ' + u.total_gb + ' GB') : '—';
     $('usbBar').style.width = (u.mounted ? u.free_pct : 0) + '%';
+
+    // reflect the applied config into the dropdowns (only when not being edited)
+    var c = s.config || {};
+    setSel('cfgEcho', c.echo_type);
+    setSel('cfgWork', c.work_mode);
+    setSel('cfgImu', c.imu_freq);
+    setSel('cfgScan', c.scan_mode);
+    setSel('cfgCoord', c.coordinate);
+    setSel('cfgHiSens', c.high_sensitivity);
+    setSel('cfgRtk', c.rtk_source);
+  }
+
+  // Set a <select> to a value unless the user is actively focused on it.
+  function setSel(id, val) {
+    var el = $(id);
+    if (el && val != null && document.activeElement !== el) { el.value = val; }
   }
 
   function cls(v) {
@@ -105,7 +121,17 @@
     confirmPost('/api/system/shutdown', 'Shut the Pi down now?');
   };
   $('btnApply').onclick = function () {
-    post('/api/config', { echo_type: $('cfgEcho').value, work_mode: $('cfgWork').value });
+    post('/api/config', {
+      echo_type: $('cfgEcho').value,
+      work_mode: $('cfgWork').value,
+      imu_freq: $('cfgImu').value,
+      scan_mode: $('cfgScan').value,
+      coordinate: $('cfgCoord').value,
+      high_sensitivity: $('cfgHiSens').value
+    });
+  };
+  $('btnApplyRtk').onclick = function () {
+    post('/api/config', { rtk_source: $('cfgRtk').value });
   };
   $('btnUsbAttach').onclick = function () { post('/api/usb/attach'); };
   $('btnUsbDetach').onclick = function () {

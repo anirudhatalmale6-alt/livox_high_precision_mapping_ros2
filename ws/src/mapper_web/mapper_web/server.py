@@ -45,6 +45,11 @@ def _find_web_dir():
 
 WEB_DIR = _find_web_dir()
 
+# Config keys the dashboard can set. LiDAR settings map to Livox SDK calls in the
+# driver control link; rtk_source picks the UM982 correction transport.
+CONFIG_KEYS = ('echo_type', 'work_mode', 'imu_freq', 'scan_mode',
+               'coordinate', 'high_sensitivity', 'rtk_source')
+
 
 class App:
     """Holds the wired-up components; the handler talks to this."""
@@ -103,7 +108,7 @@ class Handler(BaseHTTPRequestHandler):
                 ok, msg = self.app.ctl.stop()
             elif path == '/api/config':
                 self.app.state.merge('config', **{k: body[k] for k in
-                                     ('echo_type', 'work_mode') if k in body})
+                                     CONFIG_KEYS if k in body})
                 ok, msg = self._apply_config(body)
             elif path == '/api/usb/check':
                 self.app.refresh_usb(); ok, msg = True, 'checked'
@@ -125,11 +130,48 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- helpers ----------------------------------------------------------
     def _apply_config(self, body):
-        # On the Pi this pushes echo type / work mode to the LiDAR via the
-        # Livox SDK. In simulate we just record it. (SDK hook: livox config.)
+        # Two kinds of settings arrive here:
+        #
+        #  LiDAR settings -> pushed to the Avia via the Livox SDK (driver
+        #  control link). Each maps to one SDK call:
+        #    echo_type        -> LidarSetPointCloudReturnMode
+        #    work_mode        -> LidarSetMode (Normal / PowerSaving / Standby)
+        #    imu_freq         -> LidarSetImuPushFrequency (0 / 200 Hz)
+        #    scan_mode        -> LidarSetScanPattern (non-repetitive / repetitive)
+        #    coordinate       -> SetCartesianCoordinate / SetSphericalCoordinate
+        #    high_sensitivity -> LidarEnableHighSensitivity / ...Disable...
+        #
+        #  rtk_source (Serial / NTRIP / MavLink) is a GNSS-bringup choice, not a
+        #  LiDAR command - we persist it so the next system restart brings the
+        #  UM982 up on that transport.
+        if 'rtk_source' in body:
+            ok, note = self._persist_rtk_source(body['rtk_source'])
+            if not ok:
+                return False, note
+            return True, 'RTK source set to ' + str(body['rtk_source']) + \
+                ' - applies on next restart'
         if self.app.opts.simulate:
             return True, 'config applied (sim)'
-        return True, 'config applied'
+        # Live: hand the LiDAR settings to the control link.
+        return self.app.ctl.apply_lidar_config(
+            {k: body[k] for k in CONFIG_KEYS if k in body and k != 'rtk_source'})
+
+    def _persist_rtk_source(self, source):
+        """Save the chosen RTK transport where field.launch can read it."""
+        valid = ('NTRIP', 'Serial', 'MavLink')
+        if source not in valid:
+            return False, 'unknown RTK source: ' + str(source)
+        if self.app.opts.simulate:
+            return True, 'ok (sim)'
+        try:
+            path = os.environ.get('MAPPER_RTK_SOURCE_FILE',
+                                  '/etc/mapper/rtk_source')
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w') as f:
+                f.write(source + '\n')
+            return True, 'ok'
+        except OSError as e:
+            return False, 'could not save RTK source (' + str(e) + ')'
 
     def _system(self, action):
         if self.app.opts.simulate:
