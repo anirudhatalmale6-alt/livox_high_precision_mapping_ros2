@@ -139,7 +139,10 @@ if [ "$LIVOX_OK" = "1" ] && [ -d "$HOME/Livox-SDK" ]; then
     && make -j"$(nproc)" && sudo make install ) || LIVOX_OK=0
 fi
 if [ "$LIVOX_OK" = "1" ] && [ ! -d "$WS_DIR/src/livox_ros2_driver" ]; then
-  git clone https://github.com/Livox-SDK/livox_ros2_driver.git \
+  # Our fork of livox_ros2_driver: identical to upstream plus the control link
+  # (publishes /livox/lidar_status, applies /livox/lidar_cmd) that the dashboard
+  # uses for live device status + config. See its ADDITIONS.md.
+  git clone https://github.com/anirudhatalmale6-alt/livox_ros2_driver.git \
         "$WS_DIR/src/livox_ros2_driver" || LIVOX_OK=0
 fi
 # livox_ros2_driver builds as part of the normal colcon build below; re-run it so

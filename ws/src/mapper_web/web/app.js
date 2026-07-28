@@ -70,7 +70,7 @@
     // device indicators
     var d = s.device;
     pill($('stWork'), d.work_mode, d.work_mode === 'Working Normally' ? 'ok' : '');
-    pill($('stPps'), d.pps, /no pps/i.test(d.pps) ? '' : 'ok');
+    pill($('stPps'), d.pps, (/sync|ok/i.test(d.pps) && !/no |error/i.test(d.pps)) ? 'ok' : '');
     pill($('stTemp'), d.temperature, cls(d.temperature));
     pill($('stVolt'), d.voltage, cls(d.voltage));
     pill($('stMotor'), d.motor, cls(d.motor));

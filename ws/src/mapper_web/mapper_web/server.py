@@ -65,6 +65,9 @@ class App:
             workspace=opts.workspace, mount_point=opts.mount_point,
             require_rtk=opts.require_rtk, on_fail=opts.on_fail)
         self.monitor = StatusMonitor(self.state, simulate=opts.simulate)
+        # Wire the LiDAR control link: dashboard APPLY -> LoggingController
+        # -> StatusMonitor publishes the command to the forked Livox driver.
+        self.ctl.set_config_sink(self.monitor.send_command)
         self.button = PushButton(self.ctl, led=self.led, pin=opts.button_gpio,
                                  simulate=opts.simulate)
 

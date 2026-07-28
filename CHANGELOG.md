@@ -261,6 +261,12 @@ terminals, no SSH - plus a physical pushbutton on GPIO 26.
   selectable too, persisted and applied on the next restart. **USB storage**
   (mount, free space, safe detach, format) - logs always go to USB, never the
   SD card.
+- **LiDAR control link**: a small fork of the Livox driver
+  ([anirudhatalmale6-alt/livox_ros2_driver](https://github.com/anirudhatalmale6-alt/livox_ros2_driver))
+  is what makes the two above real on the hardware. It publishes the Avia's live
+  device health on `/livox/lidar_status` (so the Device Status panel shows real
+  values, not "Unknown") and applies the config dropdowns via the Livox SDK when
+  a command arrives on `/livox/lidar_cmd`. The setup script now clones this fork.
 - Pure Python standard library - no Flask/FastAPI to install on the Pi. Runs at
   boot via the included systemd unit. `--simulate` runs the whole thing with no
   hardware for demos/dev. See [`ws/src/mapper_web/README.md`](ws/src/mapper_web/README.md).

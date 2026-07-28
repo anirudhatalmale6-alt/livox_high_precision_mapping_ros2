@@ -54,13 +54,18 @@ mkdir -p ~/Livox-SDK/build && cd ~/Livox-SDK/build
 cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. \
     && make -j"$(nproc)" && sudo make install && sudo ldconfig
 
-# livox_ros2_driver, into this workspace
+# livox_ros2_driver (our fork - upstream + the dashboard control link), into
+# this workspace
 cd ~/livox_high_precision_mapping_ros2/ws/src
-git clone https://github.com/Livox-SDK/livox_ros2_driver.git
+git clone https://github.com/anirudhatalmale6-alt/livox_ros2_driver.git
 cd ~/livox_high_precision_mapping_ros2/ws
 colcon build --symlink-install
 source install/setup.bash
 ```
+
+The fork publishes `/livox/lidar_status` (live device health) and applies config
+commands on `/livox/lidar_cmd`; that's what powers the dashboard's Device Status
+panel and the LiDAR Configuration APPLY button. See the driver's `ADDITIONS.md`.
 
 ## 4. Set your Avia's broadcast code
 
