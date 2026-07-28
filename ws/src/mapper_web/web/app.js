@@ -96,10 +96,18 @@
     setSel('cfgRtk', c.rtk_source);
   }
 
-  // Set a <select> to a value unless the user is actively focused on it.
+  // Config <select>s the user has changed but not yet applied. We must NOT
+  // overwrite these on the ~2 Hz status refresh, or the dropdown snaps back
+  // before they can hit APPLY. Cleared when they apply (the value then matches).
+  var edited = {};
+
+  // Set a <select> to a value unless the user is picking in it or has an
+  // unsaved change pending.
   function setSel(id, val) {
     var el = $(id);
-    if (el && val != null && document.activeElement !== el) { el.value = val; }
+    if (el && val != null && !edited[id] && document.activeElement !== el) {
+      el.value = val;
+    }
   }
 
   function cls(v) {
@@ -120,7 +128,18 @@
   $('btnShutdown').onclick = function () {
     confirmPost('/api/system/shutdown', 'Shut the Pi down now?');
   };
+  // Mark a dropdown as user-edited the moment they change it, so the live
+  // refresh stops overwriting it until they apply.
+  var cfgSelects = ['cfgEcho', 'cfgWork', 'cfgImu', 'cfgScan', 'cfgCoord',
+                    'cfgHiSens', 'cfgRtk'];
+  cfgSelects.forEach(function (id) {
+    var el = $(id);
+    if (el) { el.addEventListener('change', function () { edited[id] = true; }); }
+  });
+  function clearEdited(ids) { ids.forEach(function (id) { edited[id] = false; }); }
+
   $('btnApply').onclick = function () {
+    var ids = ['cfgEcho', 'cfgWork', 'cfgImu', 'cfgScan', 'cfgCoord', 'cfgHiSens'];
     post('/api/config', {
       echo_type: $('cfgEcho').value,
       work_mode: $('cfgWork').value,
@@ -128,10 +147,11 @@
       scan_mode: $('cfgScan').value,
       coordinate: $('cfgCoord').value,
       high_sensitivity: $('cfgHiSens').value
-    });
+    }).then(function () { clearEdited(ids); });
   };
   $('btnApplyRtk').onclick = function () {
-    post('/api/config', { rtk_source: $('cfgRtk').value });
+    post('/api/config', { rtk_source: $('cfgRtk').value })
+      .then(function () { clearEdited(['cfgRtk']); });
   };
   $('btnUsbAttach').onclick = function () { post('/api/usb/attach'); };
   $('btnUsbDetach').onclick = function () {
