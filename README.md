@@ -108,6 +108,22 @@ It asks for your NTRIP (RTK) login, stores it root-only in
 address — `http://<pi-ip>:8080`. Also safe to re-run; it keeps whatever is
 already configured.
 
+### Updating, and when something isn't working
+
+```bash
+bash scripts/update_field_unit.sh   # latest code, full rebuild, restart
+bash scripts/collect_diag.sh        # writes ~/mapper_diag.txt — send me that file
+```
+
+`update_field_unit.sh` builds one package at a time on low-RAM machines (any
+Pi). Building four heavy C++ packages in parallel fits in the cores but not in
+the RAM, so the kernel kills a compiler part-way and you end up with a
+workspace that *looks* built but is missing packages.
+
+`collect_diag.sh` gathers the build state, the service log, the sensor devices
+and whether port 8080 answers, into one file. The NTRIP username and password
+are masked out of it.
+
 ## Build (manual)
 
 ```bash

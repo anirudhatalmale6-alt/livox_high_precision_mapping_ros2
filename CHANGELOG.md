@@ -302,6 +302,44 @@ next step, and `mapper_web`'s `package.xml` declares its `std_msgs` dependency
 
 ---
 
+## 16. Update + diagnostics commands, and a dashboard that survives a broken build (added later)
+
+Three changes so a machine that isn't behaving can be fixed in one round trip
+instead of several.
+
+**`scripts/update_field_unit.sh`** — the single "load the latest version of
+everything" command: stop the unit, `git pull`, rebuild the whole workspace,
+refresh the service file and the workspace path, start it again, then confirm
+the dashboard actually answers on port 8080. It checks each expected package
+landed in the install tree and names any that didn't, rather than reporting
+success because the command exited.
+
+On a machine with under ~6 GB of RAM (any Pi) it builds **one package at a time
+with two compiler jobs**. A Pi 4 has four cores but not enough memory to finish
+four heavy C++ compiles at once, so the kernel kills one part-way; the failure
+scrolls past inside hundreds of lines of build output and you are left with a
+workspace that looks built but is missing packages. If the build log shows an
+out-of-memory kill, the script now says so and prints the commands to add swap.
+
+**`scripts/collect_diag.sh`** — writes one file, `~/mapper_diag.txt`, with the
+build state (which packages are in the install tree, whether the dashboard page
+is installed), `/etc/mapper/field.env`, the service status and the last 150 log
+lines, the sensor devices and udev rule, whether anything is listening on 8080,
+and the GPIO support. Lines that matter are marked `<--` and repeated as a short
+summary on screen. **The NTRIP username and password are masked**, so the file
+is safe to send. It asks for sudo up front — everything after that is redirected
+into the report, so a password prompt down there would have been invisible.
+
+**`field.launch.py` no longer takes the dashboard down with it.** The sensor
+bringup was a hard include: if `livox_hp_mapping_bringup` was missing — exactly
+what a memory-killed build leaves behind — the entire launch aborted and the web
+page never appeared. That is what "the web stuff was never added to the build"
+looked like from the outside. Both the LiDAR driver and the sensor bringup are
+now best-effort, so the dashboard always comes up and tells you what is missing.
+It is the thing you diagnose *with*; it must not be the first casualty.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message

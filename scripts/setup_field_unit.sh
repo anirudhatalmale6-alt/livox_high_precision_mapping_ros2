@@ -130,7 +130,8 @@ sleep 8
 if systemctl is-active --quiet mapper-field; then
   ok "mapper-field is running"
 else
-  warn "mapper-field is not running yet — check it with:  systemctl status mapper-field"
+  warn "mapper-field is not running yet. Run this and send me the file it makes:"
+  warn "    bash scripts/collect_diag.sh"
 fi
 
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
@@ -150,6 +151,12 @@ Useful checks:
     systemctl status mapper-field          # is it running?
     journalctl -u mapper-field -f          # live log
     sudo systemctl restart mapper-field    # restart it
+
+To load the latest version of everything later:
+    bash scripts/update_field_unit.sh
+
+If anything is not working, this writes one report file for me:
+    bash scripts/collect_diag.sh
 
 If you change the NTRIP login later:
     sudo nano /etc/mapper/field.env

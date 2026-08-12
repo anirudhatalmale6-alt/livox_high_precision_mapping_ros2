@@ -64,20 +64,35 @@ def generate_launch_description():
                                    '- start the LiDAR driver yourself.'))
 
     # 2. Sensors + RTK bringup (UM982 + NTRIP + IMU adapter).
-    sensors_launch = os.path.join(
-        get_package_share_directory('livox_hp_mapping_bringup'),
-        'launch', 'sensors.launch.py')
-    actions.append(IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(sensors_launch),
-        launch_arguments={
-            'rtcm_source': LaunchConfiguration('rtcm_source'),
-            'ntrip_host': LaunchConfiguration('ntrip_host'),
-            'ntrip_port': LaunchConfiguration('ntrip_port'),
-            'ntrip_mountpoint': LaunchConfiguration('ntrip_mountpoint'),
-            'ntrip_user': LaunchConfiguration('ntrip_user'),
-            'ntrip_password': LaunchConfiguration('ntrip_password'),
-            'use_gnss_heading': LaunchConfiguration('use_gnss_heading'),
-        }.items()))
+    # Also best-effort. If this package is missing (e.g. a build that ran out of
+    # memory part-way on a Pi), a hard include would abort the WHOLE launch and
+    # take the dashboard down with it - which reads as "the web page is gone"
+    # when the real fault is a half-built workspace. The dashboard must always
+    # come up, because it is how you see what is wrong.
+    try:
+        sensors_launch = os.path.join(
+            get_package_share_directory('livox_hp_mapping_bringup'),
+            'launch', 'sensors.launch.py')
+        if os.path.isfile(sensors_launch):
+            actions.append(IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(sensors_launch),
+                launch_arguments={
+                    'rtcm_source': LaunchConfiguration('rtcm_source'),
+                    'ntrip_host': LaunchConfiguration('ntrip_host'),
+                    'ntrip_port': LaunchConfiguration('ntrip_port'),
+                    'ntrip_mountpoint': LaunchConfiguration('ntrip_mountpoint'),
+                    'ntrip_user': LaunchConfiguration('ntrip_user'),
+                    'ntrip_password': LaunchConfiguration('ntrip_password'),
+                    'use_gnss_heading': LaunchConfiguration('use_gnss_heading'),
+                }.items()))
+        else:
+            actions.append(LogInfo(msg='[field] sensors.launch.py not found - '
+                                       'GNSS/IMU will not start. Re-run '
+                                       'scripts/update_field_unit.sh.'))
+    except PackageNotFoundError:
+        actions.append(LogInfo(msg='[field] livox_hp_mapping_bringup not built - '
+                                   'GNSS/IMU will not start. Re-run '
+                                   'scripts/update_field_unit.sh.'))
 
     # 3. The dashboard (serves the page, GPIO button, RGB LED, logging).
     actions.append(Node(
