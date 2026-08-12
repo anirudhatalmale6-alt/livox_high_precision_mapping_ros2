@@ -11,6 +11,8 @@
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <!-- LiDAR control link: /livox/lidar_status + /livox/lidar_cmd. -->
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>livox_hp_mapping_bringup</exec_depend>
 
   <export>

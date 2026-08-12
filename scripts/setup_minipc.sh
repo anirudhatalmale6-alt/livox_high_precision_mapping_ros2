@@ -177,17 +177,22 @@ TIP — run this to add them automatically:
   echo 'source $WS_DIR/install/setup.bash' >> ~/.bashrc
 
 ------------------------------------------------------------------- NEXT STEPS
-1) Install the Hiwonder IM10A ROS2 driver from the IM10A docs (section
-   "3.2 ROS2 Application Routine"). It publishes the IMU on /imu/data.
+1) Plug in the UM982 (GPS) and IM10A (IMU) over USB, and connect the Avia.
 
-2) Plug in the UM982 and IM10A (USB) and note their ports:  ls /dev/ttyUSB*
+2) Set up the field unit — the web dashboard, the boot service, the button and
+   the stable sensor names — with ONE more command:
+
+     bash $REPO_DIR/scripts/setup_field_unit.sh
+
+   That is the step that makes the unit "power on and go". When it finishes it
+   prints the dashboard address (http://<pi-ip>:8080).
 
 3) Configure PPS time sync (optional but recommended):  see docs/time_sync.md
 
-4) Launch the whole pipeline:
+4) Prefer to drive it from a terminal instead? You can still launch by hand:
      source $WS_DIR/install/setup.bash
      ros2 launch livox_hp_mapping_bringup mapping_online.launch.py \\
-          um982_port:=/dev/ttyUSB0 use_gnss_heading:=true
+          um982_port:=/dev/gps use_gnss_heading:=true
 
 5) No hardware yet? See the point cloud the pipeline produces with the
    built-in self-test:   see tools/README.md

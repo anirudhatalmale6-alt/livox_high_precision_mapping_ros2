@@ -86,6 +86,18 @@ or for developing the UI.
 
 ## Everything at boot - power on and go (recommended for the field)
 
+**Setting up a new machine? One command does all of this for you:**
+
+```bash
+bash scripts/setup_field_unit.sh
+```
+
+It installs the GPIO support, the stable `/dev/gps` / `/dev/imu` names, the
+`/etc/mapper/field.env` config (it asks for your NTRIP login), the boot service
+and the passwordless shutdown rule - then starts the unit and prints the
+dashboard address. Safe to re-run; it keeps anything already configured. The
+manual steps below are what it does, if you'd rather do them yourself.
+
 `field.launch.py` starts the whole unit with one command - LiDAR driver +
 sensors/RTK + dashboard:
 

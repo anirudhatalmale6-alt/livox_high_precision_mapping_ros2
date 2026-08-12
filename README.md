@@ -91,8 +91,22 @@ bash setup_minipc.sh
 ```
 
 Run it as your normal user (not `sudo`); it will ask for your password when it
-needs it. When it finishes, follow the "NEXT STEPS" it prints. It is safe to
-re-run. See `scripts/setup_minipc.sh` for exactly what it does.
+needs it. It is safe to re-run. See `scripts/setup_minipc.sh` for exactly what
+it does.
+
+Then, with the sensors plugged in, one more command turns it into a
+**power-on-and-go field unit** — web dashboard, boot service, pushbutton, and
+stable `/dev/gps` / `/dev/imu` names:
+
+```bash
+cd ~/livox_high_precision_mapping_ros2
+bash scripts/setup_field_unit.sh
+```
+
+It asks for your NTRIP (RTK) login, stores it root-only in
+`/etc/mapper/field.env` (never in git), starts the unit and prints the dashboard
+address — `http://<pi-ip>:8080`. Also safe to re-run; it keeps whatever is
+already configured.
 
 ## Build (manual)
 

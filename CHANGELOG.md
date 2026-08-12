@@ -274,6 +274,32 @@ terminals, no SSH - plus a physical pushbutton on GPIO 26.
 Visualisation (colour by height/depth/reflectivity, point size) is done
 afterwards in CloudCompare - that data is all inside the `.pcd`.
 
+## 15. Setting up a NEW machine now installs the dashboard too (added later)
+
+`setup_minipc.sh` installs ROS2 and *builds* everything, but the pieces that
+make the unit run by itself - the boot service, the config file, the GPIO
+support, the stable sensor names - were originally done by hand. So a brand new
+Pi came up with all the code present but nothing serving the dashboard, which
+looks exactly like "the web stuff was never added to the build".
+
+New script `scripts/setup_field_unit.sh` does all of it in one go:
+
+- installs `python3-gpiozero` / `python3-lgpio` for the pushbutton + status LED,
+- runs the sensor-naming step so `/dev/gps` and `/dev/imu` are stable (both
+  devices use the same CH340 chip and would otherwise swap on every boot),
+- writes `/etc/mapper/field.env` - asks for the NTRIP login, stores it root-only
+  (`chmod 600`), never in git - and always points `MAPPER_WS` at the workspace
+  it actually found, so moving to a new machine can't leave a stale path,
+- installs and enables `mapper-field.service` (LiDAR + RTK + dashboard at boot),
+- adds the passwordless-shutdown sudo rule,
+- starts the unit and prints `http://<pi-ip>:8080`.
+
+It is safe to re-run: an existing `field.env` is kept as-is (only the workspace
+path is refreshed), and it rebuilds `mapper_web` only if the dashboard files
+aren't in the colcon install tree yet. `setup_minipc.sh` now points at it as the
+next step, and `mapper_web`'s `package.xml` declares its `std_msgs` dependency
+(used by the LiDAR control link).
+
 ---
 
 ## Where the detail lives
