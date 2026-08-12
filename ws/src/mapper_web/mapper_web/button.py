@@ -31,11 +31,23 @@ class PushButton:
         self._armed_log = False
         self._armed_shutdown = False
         if not self.simulate:
-            # pull_up=True => pressed reads active; matches GPIO26 -> GND wiring.
-            self._btn = _Button(pin, pull_up=active_low, hold_time=0.05)
-            self._btn.when_pressed = self._pressed
-            self._btn.when_released = self._released
-            threading.Thread(target=self._watch_hold, daemon=True).start()
+            # Importing gpiozero is NOT proof that GPIO works: on a board it
+            # does not recognise (Orange Pi, generic SBCs) the import succeeds
+            # and Button() then raises BadPinFactory. That used to escape and
+            # kill the dashboard on startup, so the web page never appeared
+            # because of a pushbutton. Fall back to "no button" instead - the
+            # web page can still do everything the button does.
+            try:
+                # pull_up=True => pressed reads active; matches GPIO26 -> GND wiring.
+                self._btn = _Button(pin, pull_up=active_low, hold_time=0.05)
+                self._btn.when_pressed = self._pressed
+                self._btn.when_released = self._released
+                threading.Thread(target=self._watch_hold, daemon=True).start()
+            except Exception as e:
+                self.simulate = True
+                self._btn = None
+                print('[mapper_web] pushbutton disabled (no usable GPIO on this '
+                      'board): %s' % e, flush=True)
 
     # ---- hardware callbacks ----------------------------------------------
     def _pressed(self):

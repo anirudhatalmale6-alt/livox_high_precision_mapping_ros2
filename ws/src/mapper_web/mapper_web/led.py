@@ -58,12 +58,24 @@ class StatusLed:
         self._flash_color = RED
         self._stop = threading.Event()
 
-        if _HAVE_GPIO and red is not None and green is not None and blue is not None:
-            self.rgb = _RGBLED(red, green, blue)
-            self.enabled = True
-        elif _HAVE_GPIO and mono is not None:
-            self.mono = _LED(mono)
-            self.enabled = True
+        # Importing gpiozero is NOT proof that GPIO works. On a board it does not
+        # recognise (Orange Pi, generic SBCs) the import succeeds and the pin
+        # object then raises BadPinFactory. That used to escape and kill the
+        # whole dashboard on startup - no web page at all, because of an LED.
+        # The LED is a nicety; the dashboard is not. Never let it take the page
+        # down.
+        try:
+            if _HAVE_GPIO and red is not None and green is not None and blue is not None:
+                self.rgb = _RGBLED(red, green, blue)
+                self.enabled = True
+            elif _HAVE_GPIO and mono is not None:
+                self.mono = _LED(mono)
+                self.enabled = True
+        except Exception as e:
+            self.rgb = self.mono = None
+            self.enabled = False
+            print('[mapper_web] status LED disabled (no usable GPIO on this '
+                  'board): %s' % e, flush=True)
 
         if self.enabled:
             threading.Thread(target=self._loop, daemon=True).start()

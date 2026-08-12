@@ -31,6 +31,12 @@ echo "user     : $(id -un)   host: $(hostname)"
 echo "repo     : $REPO_DIR"
 
 sec "1. Machine"
+# Which board this is matters: GPIO libraries are Raspberry-Pi specific and
+# quietly do nothing (or throw) on an Orange Pi or other SBC.
+BOARD=""
+[ -r /proc/device-tree/model ] && BOARD=$(tr -d '\0' < /proc/device-tree/model)
+[ -n "$BOARD" ] || BOARD=$(grep -m1 -E '^Hardware' /proc/cpuinfo 2>/dev/null | cut -d: -f2-)
+echo "board model:${BOARD:- unknown (not an SBC, or no device-tree)}"
 run "uname -a"
 run "cat /etc/os-release | head -3"
 run "free -h"
@@ -99,11 +105,44 @@ run "ls -l /dev/ttyUSB* 2>&1"
 run "cat /etc/udev/rules.d/99-livox-sensors.rules 2>&1"
 run "lsusb"
 echo
+# The GPS and IMU use the same USB chip, so the only way to tell what is on a
+# port is to listen. The GPS talks NMEA text ($GNGGA...); the IMU talks binary.
+echo "What is actually talking on each serial port (3 s listen each):"
+for p in /dev/ttyUSB*; do
+  [ -e "$p" ] || continue
+  stty -F "$p" 115200 raw -echo 2>/dev/null
+  SAMPLE=$(timeout 3 cat "$p" 2>/dev/null | strings | head -5)
+  if echo "$SAMPLE" | grep -qE 'GNGGA|GPGGA|GNRMC|GPRMC|GNVTG'; then
+    echo "  $p = GPS (NMEA seen):"
+  elif [ -n "$SAMPLE" ]; then
+    echo "  $p = data, but no NMEA (likely the IMU, or GPS with no antenna/fix):"
+  else
+    echo "  $p = SILENT - nothing coming out of this port at 115200"
+  fi
+  echo "$SAMPLE" | sed 's/^/      /' | head -5
+done
+
+echo
 echo "brltty (steals CH340 serial ports if installed):"
 dpkg -l brltty 2>/dev/null | grep -q '^ii' && echo "  INSTALLED <-- remove it: sudo apt remove brltty -y" || echo "  not installed (good)"
 
 sec "8. GPIO support"
-python3 -c "import gpiozero; print('gpiozero OK', gpiozero.__version__)" 2>&1 | head -3
+# Importing gpiozero proves nothing - it imports fine on boards it cannot
+# drive. Actually try to make a pin object, which is what fails on an Orange Pi.
+python3 - <<'PYEOF' 2>&1 | head -6
+try:
+    import gpiozero
+    print('gpiozero imports OK, version', getattr(gpiozero, '__version__', '?'))
+except Exception as e:
+    print('gpiozero NOT installed:', e)
+    raise SystemExit
+try:
+    d = gpiozero.LED(16); d.close()
+    print('GPIO pins usable: YES')
+except Exception as e:
+    print('GPIO pins usable: NO -', type(e).__name__, e)
+    print('  (button + status LED will be off; the web dashboard is unaffected)')
+PYEOF
 
 sec "9. LiDAR reachability (Avia is on ethernet)"
 run "ip -4 addr show | grep -E 'inet |^[0-9]'"
