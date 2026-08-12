@@ -340,6 +340,41 @@ It is the thing you diagnose *with*; it must not be the first casualty.
 
 ---
 
+## 17. Orange Pi support, single-sensor setup, and the NTRIP password (added later)
+
+Four fixes prompted by a rebuild on an Orange Pi.
+
+**The dashboard no longer dies with the GPIO.** `led.py` and `button.py`
+guarded the gpiozero *import*, but importing gpiozero proves nothing: on a
+board it does not recognise it imports fine and `RGBLED()` / `Button()` then
+raise `BadPinFactory`. Nothing caught that, so it escaped and killed the node
+before it bound port 8080 — the whole web dashboard gone because of a status
+LED. Both constructors are wrapped now; the LED and button switch themselves
+off with one line each and the page serves normally. On a board gpiozero cannot
+drive you lose the pushbutton and the RGB LED; the web page does everything
+they did.
+
+**`setup_sensor_names.sh` handles one sensor.** It used to refuse to write
+anything unless it found *both* a GPS and an IMU. With the Avia's built-in IMU
+there is no second serial device, so it wrote nothing at all, `/dev/gps` never
+existed, and the GPS driver retried forever. It now decides after looking at
+every port instead of judging each in isolation, and a lone silent port is
+taken as the GPS — the UM982 stays quiet until it is configured or has sky
+view, so silence is not evidence of anything.
+
+**The NTRIP password is out of the process list.** `mapper-field.service`
+passed it as a launch argument, so `ps` and `systemctl status` showed it in the
+clear to every user on the machine, and it landed in any log or diagnostic that
+got pasted or sent. `field.launch.py` now defaults the username and password
+from the environment, which `EnvironmentFile=` already supplies, and the unit
+passes neither on the command line. An explicit launch argument still wins.
+
+**`collect_diag.sh` scrubs the whole report**, not just `field.env`. Masking
+one file was never enough when the same secret appears in the process list and
+the service log.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message

@@ -3,8 +3,10 @@
 # collect_diag.sh — one command that gathers everything needed to work out why
 # the unit is not coming up, and writes it to ~/mapper_diag.txt.
 #
-# Send me that file (or paste its contents). It contains NO passwords — the
-# NTRIP password and username are masked out.
+# Send me that file (or paste its contents). It contains NO passwords: the
+# whole report is passed through a scrubber before it is written, so the NTRIP
+# username and password are masked everywhere they appear — including in the
+# systemd process list and the service log, not just in field.env.
 #
 # Usage:
 #   bash scripts/collect_diag.sh
@@ -149,7 +151,17 @@ run "ip -4 addr show | grep -E 'inet |^[0-9]'"
 
 echo
 echo "===== END OF REPORT ====="
-} > "$OUT" 2>&1
+# Scrub secrets from the ENTIRE report, not just from field.env. The service
+# passes the NTRIP login as launch arguments, so it also shows up verbatim in
+# `systemctl status` (the process list) and can appear in the log. Masking only
+# the config file was not enough - this catches every place it appears.
+} 2>&1 | sed -E \
+  -e 's/(ntrip_password:?=)[^ "]*/\1********/gI' \
+  -e 's/(ntrip_user:?=)[^ "]*/\1********/gI' \
+  -e 's/(NTRIP_PASS=).*/\1********/I' \
+  -e 's/(NTRIP_USER=).*/\1********/I' \
+  -e 's/(password[:=]+)[^ ",]*/\1********/gI' \
+  > "$OUT"
 
 echo
 echo "Diagnostics written to: $OUT"

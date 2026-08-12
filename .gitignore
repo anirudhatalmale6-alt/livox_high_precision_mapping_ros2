@@ -16,3 +16,7 @@ all_points.pcd
 *.JPG
 sync cable *.jpg
 *.geo.txt
+
+# diagnostics collected from a client machine — may contain credentials
+mapper_diag.txt
+mapper_build.log

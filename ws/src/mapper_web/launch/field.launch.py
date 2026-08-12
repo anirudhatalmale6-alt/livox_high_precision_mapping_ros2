@@ -33,8 +33,16 @@ def generate_launch_description():
         DeclareLaunchArgument('ntrip_host', default_value=''),
         DeclareLaunchArgument('ntrip_port', default_value='2101'),
         DeclareLaunchArgument('ntrip_mountpoint', default_value=''),
-        DeclareLaunchArgument('ntrip_user', default_value=''),
-        DeclareLaunchArgument('ntrip_password', default_value=''),
+        # Default the login from the environment (systemd sets these from
+        # /etc/mapper/field.env). Passing them on the command line instead put
+        # the password in the process list, where `ps` and `systemctl status`
+        # showed it in the clear to every user on the machine - and into any
+        # log or diagnostic anyone pasted. Taken from the environment they stay
+        # out of the command line. An explicit launch argument still wins.
+        DeclareLaunchArgument('ntrip_user',
+                              default_value=os.environ.get('NTRIP_USER', '')),
+        DeclareLaunchArgument('ntrip_password',
+                              default_value=os.environ.get('NTRIP_PASS', '')),
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
         # dashboard
         DeclareLaunchArgument('port', default_value='8080'),
