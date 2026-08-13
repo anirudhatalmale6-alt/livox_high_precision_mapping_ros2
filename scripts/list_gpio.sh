@@ -50,7 +50,8 @@ if command -v gpioinfo >/dev/null 2>&1; then
   echo
   echo "  (only free input-capable lines shown; full list: gpioinfo)"
 else
-  python3 - <<'PY' 2>/dev/null || echo "  install gpiod or python3-lgpio to list lines"
+  # Needs root: /dev/gpiochip* is not readable by a normal user.
+  sudo python3 - <<'PY' 2>/dev/null || echo "  install gpiod or python3-lgpio to list lines"
 try:
     import lgpio, glob, os
     for dev in sorted(glob.glob('/dev/gpiochip*')):
@@ -67,6 +68,7 @@ except ImportError:
 PY
 fi
 
+if [ "${1:-}" != "test" ] && [ "${1:-}" != "watch" ]; then
 step "Allwinner pin names (PB3, PE11, ...) -> line numbers"
 # Orange Pi and other Allwinner boards label header pins PB3 / PD4 / PL5 rather
 # than by number. The kernel line number is (bank * 32) + index, with PA=0,
@@ -95,6 +97,7 @@ else:
     print()
     print('  Convert your own:  bash scripts/list_gpio.sh names PB6')
 PY
+fi
 
 step "How to use this"
 cat <<'EOF'
@@ -128,15 +131,15 @@ if [ "${1:-}" = "test" ]; then
   trap restore_svc EXIT
   echo "  Press and release the button a few times over the next 15 seconds."
   echo
-  LINE_SPEC="$LINE_SPEC" python3 - <<'PY'
-import os, time
+  sudo python3 - "$LINE_SPEC" <<'PY'
+import sys, time
 try:
     import lgpio
 except ImportError:
     print("  python3-lgpio not installed:  sudo apt install -y python3-lgpio")
     raise SystemExit(1)
 
-spec = os.environ['LINE_SPEC']
+spec = sys.argv[1]
 chip, line = spec.split(':')
 chip, line = int(chip), int(line)
 h = lgpio.gpiochip_open(chip)
@@ -202,7 +205,7 @@ if [ "${1:-}" = "watch" ]; then
   echo "  I'll watch every free line for 20 seconds."
   echo "  PRESS AND HOLD your button a few times now."
   echo
-  python3 - <<'PY'
+  sudo python3 - <<'PY'
 import glob, time
 try:
     import lgpio

@@ -88,20 +88,38 @@ spinner.join(timeout=2.0)
 
 print('')
 print('Measured rates:')
+silent = 0
 for name, _ in TOPICS:
     n = counts.get(name, 0)
     if n < 2:
         print('  %-14s %d messages - nothing arriving' % (name, n))
+        silent += 1
         continue
     span = last[name] - first[name]
     hz = (n - 1) / span if span > 0 else 0.0
     print('  %-14s %6.1f Hz   (%d messages in %.1f s)' % (name, hz, n, span))
 
 print('')
-print('Expected: /livox/lidar about 10 Hz, /livox/imu about 200 Hz.')
-print('If the IMU comes out near 200, the dashboard was under-counting and is')
-print('now fixed. If it really is near 50, the LiDAR itself is pushing at that')
-print('rate and the next place to look is the Avia IMU setting.')
+if silent == len(TOPICS):
+    # Publishers existing while nothing flows is a specific, useful symptom:
+    # the driver is running and has advertised its topics, but the device is
+    # not feeding it. That is hardware, not software.
+    print('BOTH topics are silent while their publishers exist.')
+    print('That means the Livox driver is running and has advertised the')
+    print('topics, but the LiDAR is not sending it anything. The IMU is inside')
+    print('the Avia, so no LiDAR means no IMU either - both go quiet together.')
+    print('')
+    print('Check, in this order:')
+    print('  1. Is the Avia powered and its cable connected?')
+    print('     (mid-rewiring is the usual reason)')
+    print('  2. Is it on the network?   ping 192.168.1.1xx  (the LiDAR IP)')
+    print('  3. Is the unit running?    systemctl status mapper-field')
+    print('  4. Driver log:             journalctl -u mapper-field -n 50')
+else:
+    print('Expected: /livox/lidar about 10 Hz, /livox/imu about 200 Hz.')
+    print('If the IMU comes out near 200, the dashboard was under-counting and')
+    print('is now fixed. If it really is near 50, the LiDAR itself is pushing')
+    print('at that rate and the next place to look is the Avia IMU setting.')
 
 node.destroy_node()
 rclpy.shutdown()
