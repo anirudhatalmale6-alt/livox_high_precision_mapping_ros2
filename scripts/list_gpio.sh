@@ -67,6 +67,35 @@ except ImportError:
 PY
 fi
 
+step "Allwinner pin names (PB3, PE11, ...) -> line numbers"
+# Orange Pi and other Allwinner boards label header pins PB3 / PD4 / PL5 rather
+# than by number. The kernel line number is (bank * 32) + index, with PA=0,
+# PB=1, PC=2 ... The PL bank sits on a SEPARATE controller, normally gpiochip1.
+python3 - "${2:-}" <<'PY'
+import sys
+name = (sys.argv[1] if len(sys.argv) > 1 else '').strip().upper()
+def convert(n):
+    if not n.startswith('P') or len(n) < 3:
+        return None
+    bank, idx = n[1], n[2:]
+    if not idx.isdigit():
+        return None
+    if bank == 'L':                      # PL is on the second controller
+        return ('1 (usually)', int(idx))
+    return ('0 (usually)', (ord(bank) - ord('A')) * 32 + int(idx))
+if name:
+    r = convert(name)
+    print('  %s -> chip %s, line %d' % (name, r[0], r[1]) if r else
+          '  could not parse %r' % name)
+else:
+    print('  Examples for a 40-pin Allwinner header:')
+    for n in ('PB3', 'PB4', 'PD3', 'PD4', 'PE11', 'PL5'):
+        c, l = convert(n)
+        print('    %-5s -> chip %s, line %d' % (n, c, l))
+    print()
+    print('  Convert your own:  bash scripts/list_gpio.sh names PB6')
+PY
+
 step "How to use this"
 cat <<'EOF'
   Give the dashboard the pin as CHIP:LINE. For example, if your button is on
@@ -76,6 +105,10 @@ cat <<'EOF'
 
   A plain number (26) still means a Raspberry Pi BCM pin, so existing Pi setups
   are unaffected.
+
+  The "usually" above matters: which controller is gpiochip0 vs gpiochip1 is
+  set by the kernel, so confirm with `list_gpio.sh watch` before trusting the
+  arithmetic.
 EOF
 
 # ---- optional: identify a line by pressing the button ------------------------
