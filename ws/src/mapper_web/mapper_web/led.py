@@ -16,11 +16,9 @@
 import threading
 import time
 
-try:
-    from gpiozero import RGBLED as _RGBLED, LED as _LED   # type: ignore
-    _HAVE_GPIO = True
-except Exception:
-    _HAVE_GPIO = False
+from . import gpio as _gpio
+
+_HAVE_GPIO = _gpio.available()
 
 from . import state as st
 
@@ -64,18 +62,24 @@ class StatusLed:
         # whole dashboard on startup - no web page at all, because of an LED.
         # The LED is a nicety; the dashboard is not. Never let it take the page
         # down.
+        # Three separate on/off lines rather than gpiozero's RGBLED, so the
+        # same code drives a Pi (BCM numbers) and any other board (CHIP:LINE).
         try:
             if _HAVE_GPIO and red is not None and green is not None and blue is not None:
-                self.rgb = _RGBLED(red, green, blue)
+                self.rgb = [_gpio.OutputPin(red), _gpio.OutputPin(green),
+                            _gpio.OutputPin(blue)]
                 self.enabled = True
             elif _HAVE_GPIO and mono is not None:
-                self.mono = _LED(mono)
+                self.mono = _gpio.OutputPin(mono)
                 self.enabled = True
         except Exception as e:
             self.rgb = self.mono = None
             self.enabled = False
             print('[mapper_web] status LED disabled (no usable GPIO on this '
                   'board): %s' % e, flush=True)
+            print('[mapper_web]   on a non-Raspberry-Pi board give the pins as '
+                  'CHIP:LINE (e.g. --led-red 0:26); run scripts/list_gpio.sh '
+                  'to find them.', flush=True)
 
         if self.enabled:
             threading.Thread(target=self._loop, daemon=True).start()
@@ -117,10 +121,13 @@ class StatusLed:
     def _write(self, color):
         try:
             if self.rgb is not None:
-                self.rgb.color = color
+                # colours here are only ever 0 or 1 per channel, so plain
+                # on/off per line reproduces every state exactly.
+                for pin, level in zip(self.rgb, color):
+                    pin.set(bool(level))
             elif self.mono is not None:
                 # mono LED: on for any non-off colour
-                self.mono.on() if color != OFF else self.mono.off()
+                self.mono.set(color != OFF)
         except Exception:
             pass
 

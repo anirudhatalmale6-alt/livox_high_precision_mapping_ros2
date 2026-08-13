@@ -11,11 +11,9 @@
 import threading
 import time
 
-try:
-    from gpiozero import Button as _Button   # type: ignore
-    _HAVE_GPIO = True
-except Exception:
-    _HAVE_GPIO = False
+from . import gpio as _gpio
+
+_HAVE_GPIO = _gpio.available()
 
 # hold-time thresholds (seconds)
 LOG_MIN, LOG_MAX = 3.0, 6.0     # toggle logging when released in this band
@@ -38,16 +36,17 @@ class PushButton:
             # because of a pushbutton. Fall back to "no button" instead - the
             # web page can still do everything the button does.
             try:
-                # pull_up=True => pressed reads active; matches GPIO26 -> GND wiring.
-                self._btn = _Button(pin, pull_up=active_low, hold_time=0.05)
-                self._btn.when_pressed = self._pressed
-                self._btn.when_released = self._released
+                # active_low: button wired pin -> GND, with a pull-up.
+                self._btn = _gpio.InputPin(pin, active_low=active_low)
                 threading.Thread(target=self._watch_hold, daemon=True).start()
             except Exception as e:
                 self.simulate = True
                 self._btn = None
                 print('[mapper_web] pushbutton disabled (no usable GPIO on this '
                       'board): %s' % e, flush=True)
+                print('[mapper_web]   on a non-Raspberry-Pi board give the pin '
+                      'as CHIP:LINE (e.g. --button-gpio 0:26); run '
+                      'scripts/list_gpio.sh to find it.', flush=True)
 
     # ---- hardware callbacks ----------------------------------------------
     def _pressed(self):
@@ -55,9 +54,22 @@ class PushButton:
         self._armed_log = self._armed_shutdown = False
 
     def _watch_hold(self):
-        """While held, flash the LED as each threshold is crossed."""
+        """Poll the button: detect press/release and flash at each threshold.
+
+        Polled rather than using gpiozero's callbacks so that one code path
+        serves both backends - the kernel-line backend has no equivalent
+        callback API, and polling at 20 Hz is far finer than the 3-9 second
+        holds this button uses.
+        """
+        was_down = False
         while True:
-            if getattr(self, '_btn', None) and self._btn.is_pressed:
+            btn = getattr(self, '_btn', None)
+            down = bool(btn and btn.read())
+            if down and not was_down:
+                self._pressed()
+            elif was_down and not down:
+                self._released()
+            elif down:
                 held = time.time() - self._t0
                 if held >= SHUTDOWN and not self._armed_shutdown:
                     self._armed_shutdown = True
@@ -65,6 +77,7 @@ class PushButton:
                 elif LOG_MIN <= held < SHUTDOWN and not self._armed_log:
                     self._armed_log = True
                     if self.led: self.led.armed_flash()
+            was_down = down
             time.sleep(0.05)
 
     def _released(self):

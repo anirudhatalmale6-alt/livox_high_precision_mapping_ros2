@@ -242,13 +242,17 @@ def build_parser():
     p.add_argument('--port', type=int, default=8080)
     p.add_argument('--workspace', default='/opt/mapper/ws')
     p.add_argument('--mount-point', default='')
-    p.add_argument('--button-gpio', type=int, default=26)
+    # Pins are strings, not ints: a plain number is a Raspberry Pi BCM pin,
+    # while CHIP:LINE (e.g. 0:26) addresses a kernel GPIO line and works on any
+    # board. BCM numbering is a Raspberry Pi concept and means nothing on an
+    # Orange Pi, so a second form is needed rather than a different number.
+    p.add_argument('--button-gpio', default='26')
     # RGB status LED (client's wiring: R=16 G=20 B=21). Use --led-gpio instead
     # for a single-colour LED.
-    p.add_argument('--led-red', type=int, default=16)
-    p.add_argument('--led-green', type=int, default=20)
-    p.add_argument('--led-blue', type=int, default=21)
-    p.add_argument('--led-gpio', type=int, default=None)
+    p.add_argument('--led-red', default='16')
+    p.add_argument('--led-green', default='20')
+    p.add_argument('--led-blue', default='21')
+    p.add_argument('--led-gpio', default=None)
     # Gate logging on an RTK fix. Default OFF so you can test/log on a plain GPS
     # fix; turn ON for survey work where cm accuracy is required.
     p.add_argument('--require-rtk', action='store_true', default=False)

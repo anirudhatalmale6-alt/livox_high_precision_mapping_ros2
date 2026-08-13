@@ -375,6 +375,37 @@ the service log.
 
 ---
 
+## 18. Getting the button and status LED back on a non-Pi board (added later)
+
+Losing GPIO cost the unit its pushbutton and its RGB status LED — the two
+things that let it be driven with no screen. gpiozero could never have been the
+answer: "GPIO 26" is a Raspberry Pi BCM number and means nothing on another
+board, which is why it throws `BadPinFactory` there rather than just working.
+
+The Linux kernel addresses pins as CHIP:LINE through `/dev/gpiochip*`, which is
+board-independent. `mapper_web/gpio.py` now provides both backends behind one
+interface, chosen by how the pin is written:
+
+- `26` — a Raspberry Pi BCM pin, via gpiozero. Existing Pi setups are untouched.
+- `0:26` — line 26 on gpiochip0, via lgpio. Works on Orange Pi and anything
+  else with a mainline GPIO driver.
+
+The button is polled rather than interrupt-driven so one code path serves both
+backends; at 20 Hz that is far finer than the 3–9 second holds it measures. The
+RGB LED is driven as three plain on/off lines, which reproduces every state it
+ever used.
+
+`scripts/list_gpio.sh` finds the numbers on a new board: it lists the free,
+input-capable lines, and `list_gpio.sh watch` monitors all of them for 20
+seconds so that pressing the button identifies its own line.
+
+Verified against a stubbed kernel-GPIO backend (LED colours drive the right
+lines; a 4 s hold fires exactly one toggle), against a working gpiozero (the Pi
+path is unchanged), and with neither available (both disable themselves and the
+dashboard still serves).
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message
