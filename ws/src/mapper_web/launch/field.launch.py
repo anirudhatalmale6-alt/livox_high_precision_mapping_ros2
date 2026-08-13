@@ -44,6 +44,12 @@ def generate_launch_description():
         DeclareLaunchArgument('ntrip_password',
                               default_value=os.environ.get('NTRIP_PASS', '')),
         DeclareLaunchArgument('use_gnss_heading', default_value='true'),
+        # Put the whole recording on satellite time. ON by default here because
+        # the dashboard already starts the mapper with use_gps_time:=true - the
+        # consumer was asking for an offset that nothing was producing, so the
+        # feature sat inert and the mapper logged a warning nobody reads. This
+        # is also the software stand-in for a hardware PPS wire.
+        DeclareLaunchArgument('gps_time_sync', default_value='true'),
         # dashboard
         DeclareLaunchArgument('port', default_value='8080'),
         DeclareLaunchArgument('button_gpio', default_value='26'),
@@ -92,6 +98,7 @@ def generate_launch_description():
                     'ntrip_user': LaunchConfiguration('ntrip_user'),
                     'ntrip_password': LaunchConfiguration('ntrip_password'),
                     'use_gnss_heading': LaunchConfiguration('use_gnss_heading'),
+                    'gps_time_sync': LaunchConfiguration('gps_time_sync'),
                 }.items()))
         else:
             actions.append(LogInfo(msg='[field] sensors.launch.py not found - '
