@@ -111,9 +111,94 @@ cat <<'EOF'
   arithmetic.
 EOF
 
+# ---- test one specific line --------------------------------------------------
+if [ "${1:-}" = "test" ]; then
+  LINE_SPEC="${2:-}"
+  [ -n "$LINE_SPEC" ] || { echo "usage: bash scripts/list_gpio.sh test 0:100"; exit 1; }
+  step "Testing $LINE_SPEC"
+  # The dashboard claims the button line while it is running, which would make
+  # this test fail with 'busy' and prove nothing.
+  WAS_ACTIVE=0
+  if systemctl is-active --quiet mapper-field 2>/dev/null; then
+    WAS_ACTIVE=1
+    echo "  stopping mapper-field so the line is free (restarted at the end)"
+    sudo systemctl stop mapper-field; sleep 2
+  fi
+  restore_svc() { [ "$WAS_ACTIVE" = "1" ] && sudo systemctl start mapper-field; }
+  trap restore_svc EXIT
+  echo "  Press and release the button a few times over the next 15 seconds."
+  echo
+  LINE_SPEC="$LINE_SPEC" python3 - <<'PY'
+import os, time
+try:
+    import lgpio
+except ImportError:
+    print("  python3-lgpio not installed:  sudo apt install -y python3-lgpio")
+    raise SystemExit(1)
+
+spec = os.environ['LINE_SPEC']
+chip, line = spec.split(':')
+chip, line = int(chip), int(line)
+h = lgpio.gpiochip_open(chip)
+
+mode = None
+for flags, label in ((lgpio.SET_PULL_UP, 'internal pull-up'),
+                     (lgpio.SET_PULL_DOWN, 'internal pull-down'),
+                     (0, 'no bias (needs an external resistor)')):
+    try:
+        lgpio.gpio_claim_input(h, line, flags) if flags else \
+            lgpio.gpio_claim_input(h, line)
+        mode = label
+        break
+    except Exception as e:
+        err = e
+if mode is None:
+    print('  CANNOT CLAIM this line: %s' % err)
+    print('  It is probably already in use by the kernel or another program.')
+    raise SystemExit(1)
+print('  claimed with %s' % mode)
+
+base = lgpio.gpio_read(h, line)
+print('  resting value: %d  (a button wired to GND should rest at 1)' % base)
+if base == 0 and 'pull-up' in mode:
+    print('  NOTE: it rests at 0 with a pull-up - that reads as permanently pressed.')
+
+changes, seen = 0, base
+end = time.time() + 15
+while time.time() < end:
+    v = lgpio.gpio_read(h, line)
+    if v != seen:
+        changes += 1
+        print('    %.1fs  %d -> %d' % (15 - (end - time.time()), seen, v))
+        seen = v
+    time.sleep(0.01)
+
+print()
+if changes:
+    print('  RESULT: the line changed %d times - this IS your button.' % changes)
+else:
+    print('  RESULT: never changed. Either this is the wrong line, or the')
+    print('  button is not making contact, or it needs an external pull-up.')
+    print('  Try:  bash scripts/list_gpio.sh watch')
+lgpio.gpio_free(h, line)
+PY
+  exit 0
+fi
+
 # ---- optional: identify a line by pressing the button ------------------------
 if [ "${1:-}" = "watch" ]; then
   step "Finding your button"
+  # Same reason as above: while the dashboard runs it owns the button's line,
+  # so that line gets skipped as 'busy' and the search silently misses the one
+  # answer we are looking for.
+  WAS_ACTIVE=0
+  if systemctl is-active --quiet mapper-field 2>/dev/null; then
+    WAS_ACTIVE=1
+    echo "  stopping mapper-field so its pins are free (restarted at the end)"
+    sudo systemctl stop mapper-field; sleep 2
+  fi
+  restore_svc() { [ "$WAS_ACTIVE" = "1" ] && sudo systemctl start mapper-field; }
+  trap restore_svc EXIT
   echo "  I'll watch every free line for 20 seconds."
   echo "  PRESS AND HOLD your button a few times now."
   echo
