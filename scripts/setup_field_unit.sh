@@ -81,6 +81,15 @@ if sudo test -f /etc/mapper/field.env; then
   # The workspace path may differ on a new Pi, so always refresh just that line.
   sudo sed -i "s|^MAPPER_WS=.*|MAPPER_WS=$WS_DIR|" /etc/mapper/field.env
   echo "  MAPPER_WS set to $WS_DIR"
+  # Add any settings introduced after this file was first written, so an
+  # existing unit picks up new options without losing what is already there.
+  for kv in "BUTTON_GPIO=26" "LED_RED=16" "LED_GREEN=20" "LED_BLUE=21"; do
+    key="${kv%%=*}"
+    if ! sudo grep -q "^${key}=" /etc/mapper/field.env; then
+      echo "$kv" | sudo tee -a /etc/mapper/field.env >/dev/null
+      echo "  added $key (default — edit it if your board needs CHIP:LINE)"
+    fi
+  done
 else
   echo "  Your RTK correction (NTRIP) login is stored here — root-only, never in git."
   echo "  Press ENTER to skip any of these; you can edit the file later with:"
@@ -100,6 +109,14 @@ NTRIP_PORT=${NP:-2101}
 NTRIP_MOUNT=${NM:-YOUR_MOUNTPOINT}
 NTRIP_USER=${NU:-your_username}
 NTRIP_PASS=${NPW:-your_password}
+
+# Pushbutton + RGB LED pins. A plain number is a Raspberry Pi BCM pin;
+# CHIP:LINE (e.g. 0:100) is a kernel GPIO line and works on any board.
+# Find yours with:  bash scripts/list_gpio.sh watch
+BUTTON_GPIO=26
+LED_RED=16
+LED_GREEN=20
+LED_BLUE=21
 EOF
   sudo cp "$TMP_ENV" /etc/mapper/field.env
   rm -f "$TMP_ENV"

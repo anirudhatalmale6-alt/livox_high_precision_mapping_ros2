@@ -52,10 +52,18 @@ def generate_launch_description():
         DeclareLaunchArgument('gps_time_sync', default_value='true'),
         # dashboard
         DeclareLaunchArgument('port', default_value='8080'),
-        DeclareLaunchArgument('button_gpio', default_value='26'),
-        DeclareLaunchArgument('led_red', default_value='16'),
-        DeclareLaunchArgument('led_green', default_value='20'),
-        DeclareLaunchArgument('led_blue', default_value='21'),
+        # Pin numbers come from /etc/mapper/field.env so a different board can
+        # be wired up by editing one config file - no code change, no rebuild.
+        # A plain number is a Raspberry Pi BCM pin; CHIP:LINE (e.g. 0:100)
+        # addresses a kernel GPIO line and works on any board.
+        DeclareLaunchArgument('button_gpio',
+                              default_value=os.environ.get('BUTTON_GPIO', '26')),
+        DeclareLaunchArgument('led_red',
+                              default_value=os.environ.get('LED_RED', '16')),
+        DeclareLaunchArgument('led_green',
+                              default_value=os.environ.get('LED_GREEN', '20')),
+        DeclareLaunchArgument('led_blue',
+                              default_value=os.environ.get('LED_BLUE', '21')),
         DeclareLaunchArgument('require_rtk', default_value='false'),
         DeclareLaunchArgument('on_fail', default_value='wait'),
     ]
