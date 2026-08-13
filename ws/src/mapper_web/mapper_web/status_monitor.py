@@ -16,10 +16,12 @@
 import json
 import threading
 import time
+from collections import deque
 
 try:
     import rclpy
     from rclpy.node import Node
+    from rclpy.executors import SingleThreadedExecutor
     from sensor_msgs.msg import Imu, NavSatFix, PointCloud2
     from std_msgs.msg import String
     from rclpy.qos import qos_profile_sensor_data
@@ -50,15 +52,21 @@ _UNKNOWN_DEVICE = {
 
 
 class _RateTracker:
-    """Rolling message rate over a short window."""
+    """Rolling message rate over a short window.
+
+    A deque, not a list: tick() runs on the IMU callback at 200 Hz, and the old
+    version rebuilt the whole list on every single message.
+    """
     def __init__(self, window=2.0):
         self.window = window
-        self.stamps = []
+        self.stamps = deque()
 
     def tick(self):
         now = time.time()
         self.stamps.append(now)
-        self.stamps = [t for t in self.stamps if now - t <= self.window]
+        cutoff = now - self.window
+        while self.stamps and self.stamps[0] < cutoff:
+            self.stamps.popleft()
 
     def hz(self):
         if len(self.stamps) < 2:
@@ -118,8 +126,21 @@ class StatusMonitor:
         with self._cmd_lock:
             self._cmd_pub = node.create_publisher(String, '/livox/lidar_cmd', 10)
 
+        # Spin on a dedicated thread instead of calling spin_once() in this
+        # loop. spin_once() handles ONE callback per call, so the number of
+        # messages we could ever count was capped by how fast this loop went
+        # round - roughly 50 per second once the status merging and JSON work
+        # is included. The IMU publishes at 200 Hz, so the dashboard reported
+        # about 50 Hz and looked like failing hardware when the only thing
+        # falling behind was our own counter. The LiDAR at 10 Hz fitted under
+        # that ceiling, which is why it always looked correct.
+        executor = SingleThreadedExecutor()
+        executor.add_node(node)
+        spinner = threading.Thread(target=executor.spin, daemon=True)
+        spinner.start()
+
         while not self._stop.is_set():
-            rclpy.spin_once(node, timeout_sec=0.2)
+            time.sleep(0.2)
             self.s.merge('lidar', ok=lidar.alive(), rate_hz=lidar.hz())
             self.s.merge('imu', ok=imu.alive(), rate_hz=imu.hz())
             gnss_ok = (time.time() - gnss_state['t']) < 3.0
@@ -135,6 +156,8 @@ class StatusMonitor:
             self.s.update(connected=lidar.alive())
         with self._cmd_lock:
             self._cmd_pub = None
+        executor.shutdown()
+        spinner.join(timeout=2.0)
         node.destroy_node()
         rclpy.shutdown()
 
