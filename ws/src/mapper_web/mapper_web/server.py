@@ -63,7 +63,8 @@ class App:
         self.ctl = LoggingController(
             self.state, self.usb, led=self.led, simulate=opts.simulate,
             workspace=opts.workspace, mount_point=opts.mount_point,
-            require_rtk=opts.require_rtk, on_fail=opts.on_fail)
+            require_rtk=opts.require_rtk, on_fail=opts.on_fail,
+            require_gps_time=opts.require_gps_time)
         self.monitor = StatusMonitor(self.state, simulate=opts.simulate)
         # Wire the LiDAR control link: dashboard APPLY -> LoggingController
         # -> StatusMonitor publishes the command to the forked Livox driver.
@@ -252,6 +253,12 @@ def build_parser():
     # fix; turn ON for survey work where cm accuracy is required.
     p.add_argument('--require-rtk', action='store_true', default=False)
     p.add_argument('--no-require-rtk', dest='require_rtk', action='store_false')
+    # Refuse to start a scan on the computer clock. On by default: the mapper's
+    # fallback from satellite time to the computer clock is silent, so without
+    # this a run can be recorded against a wrong clock and look entirely normal.
+    p.add_argument('--require-gps-time', action='store_true', default=True)
+    p.add_argument('--no-require-gps-time', dest='require_gps_time',
+                   action='store_false')
     p.add_argument('--on-fail', choices=['wait', 'abort'], default='wait')
     p.add_argument('--simulate', action='store_true',
                    help='run with no ROS2/GPIO/USB (dev + demo)')

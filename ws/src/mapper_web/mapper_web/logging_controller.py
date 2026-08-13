@@ -18,7 +18,7 @@ from . import state as st
 class LoggingController:
     def __init__(self, shared, usb, led=None, simulate=False,
                  workspace='/opt/mapper/ws', mount_point='/media/log',
-                 require_rtk=True, on_fail='wait'):
+                 require_rtk=True, on_fail='wait', require_gps_time=True):
         self.s = shared
         self.usb = usb
         self.led = led
@@ -27,6 +27,8 @@ class LoggingController:
         self.mount_point = mount_point
         self.require_rtk = require_rtk        # gate active logging on an RTK fix
         self.on_fail = on_fail                # 'wait' (retry) or 'abort'
+        # gate logging on satellite time being live, not the computer clock
+        self.require_gps_time = require_gps_time
         self._proc = None
         self._lock = threading.Lock()
         # Wired by the LiDAR control link once the forked driver is running: a
@@ -71,8 +73,14 @@ class LoggingController:
             imu_ok = self.s.get('imu')['ok'] or self.simulate
             gnss = self.s.get('gnss')
             gnss_ok = (not self.require_rtk) or gnss['fix'].lower().startswith('rtk') or self.simulate
+            # Scans must carry satellite time, not the computer clock. The
+            # mapper's fallback to the computer clock is silent, so without
+            # this check a run could be recorded on a wrong clock and look
+            # perfectly normal until the data was analysed.
+            tsync_ok = ((not self.require_gps_time)
+                        or self.s.get('time_sync')['ok'] or self.simulate)
 
-            if usb_ok and lidar_ok and imu_ok and gnss_ok:
+            if usb_ok and lidar_ok and imu_ok and gnss_ok and tsync_ok:
                 return True
 
             missing = []
@@ -80,6 +88,7 @@ class LoggingController:
             if not lidar_ok: missing.append('LiDAR')
             if not imu_ok: missing.append('IMU')
             if not gnss_ok: missing.append('RTK fix')
+            if not tsync_ok: missing.append('GPS time')
             msg = 'Waiting for: ' + ', '.join(missing)
 
             if self.on_fail == 'abort' or time.time() > deadline:

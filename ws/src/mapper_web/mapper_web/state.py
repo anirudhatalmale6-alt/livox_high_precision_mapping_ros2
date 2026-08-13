@@ -29,6 +29,12 @@ class MapperState:
             'lidar': {'ok': False, 'rate_hz': 0.0},
             'imu': {'ok': False, 'rate_hz': 0.0},
             'gnss': {'ok': False, 'fix': 'No fix', 'sats': 0},
+            # Which clock the scan is stamped with. The mapper falls back to
+            # the computer clock when the UM982 is not publishing a satellite
+            # time offset, and that fallback is silent - so it is surfaced here
+            # and checked before logging starts.
+            'time_sync': {'ok': False, 'source': 'Computer clock',
+                          'offset_s': 0.0},
 
             # LiDAR device status (read-only indicators from the driver)
             'device': {

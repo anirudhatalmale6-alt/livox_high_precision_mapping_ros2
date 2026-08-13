@@ -23,7 +23,7 @@ try:
     from rclpy.node import Node
     from rclpy.executors import SingleThreadedExecutor
     from sensor_msgs.msg import Imu, NavSatFix, PointCloud2
-    from std_msgs.msg import String
+    from std_msgs.msg import Float64, String
     from rclpy.qos import qos_profile_sensor_data
     _HAVE_ROS = True
 except Exception:
@@ -122,6 +122,18 @@ class StatusMonitor:
         node.create_subscription(String, '/livox/lidar_status',
                                  on_status, 10)
 
+        # The UM982 driver publishes (satellite - computer) seconds only while
+        # GPS-time sync is actually working. Its presence is the proof that
+        # scans are stamped with satellite time; its absence means the mapper
+        # is quietly using the computer clock.
+        tsync = {'offset': 0.0, 't': 0.0}
+
+        def on_offset(m):
+            tsync['offset'] = float(m.data)
+            tsync['t'] = time.time()
+        node.create_subscription(Float64, '/gnss_inertial/time_offset',
+                                 on_offset, qos_profile_sensor_data)
+
         # Command channel to the forked Livox driver (the control link).
         with self._cmd_lock:
             self._cmd_pub = node.create_publisher(String, '/livox/lidar_cmd', 10)
@@ -147,6 +159,12 @@ class StatusMonitor:
             self.s.merge('gnss', ok=gnss_ok,
                          fix=gnss_state['fix'] if gnss_ok else 'No fix',
                          sats=gnss_state['sats'])
+            # 5 s: the offset is republished with every GPS fix (~1 Hz), so
+            # anything older than a few seconds means it has stopped.
+            ts_ok = (time.time() - tsync['t']) < 5.0
+            self.s.merge('time_sync', ok=ts_ok,
+                         source='GPS satellite time' if ts_ok else 'Computer clock',
+                         offset_s=round(tsync['offset'], 3) if ts_ok else 0.0)
             # Device rows: apply the latest status if it's fresh, else Unknown
             # (driver not running / lidar unplugged) so we never show stale data.
             if dev_state['device'] and (time.time() - dev_state['t']) < 4.0:
@@ -208,6 +226,8 @@ class StatusMonitor:
         self.s.merge('lidar', ok=True, rate_hz=10.0)
         self.s.merge('imu', ok=True, rate_hz=200.0)
         self.s.merge('gnss', ok=True, fix='RTK Fixed', sats=28)
+        self.s.merge('time_sync', ok=True, source='GPS satellite time',
+                     offset_s=0.042)
         self.s.merge('device', work_mode='Working Normally', pps='No PPS',
                      temperature='Normal', voltage='Normal', motor='Normal',
                      dust='Clean', service_life='OK', firmware='11.08.0006')

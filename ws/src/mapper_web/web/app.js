@@ -66,6 +66,13 @@
     var gfix = s.gnss.fix + (s.gnss.sats ? ' - ' + s.gnss.sats + ' sats' : '');
     var gcls = s.gnss.ok ? (/rtk/i.test(s.gnss.fix) ? 'ok' : 'warn') : 'bad';
     pill($('stGnss'), s.gnss.ok ? gfix : 'No fix', gcls);
+    // Which clock the scan is stamped with. Red when it is the computer clock:
+    // that is a silent fallback, and a scan on a wrong clock looks normal until
+    // the data is analysed.
+    var ts = s.time_sync || {ok: false, source: 'Computer clock', offset_s: 0};
+    var tsTxt = ts.ok ? 'GPS time (' + (ts.offset_s >= 0 ? '+' : '') + ts.offset_s + ' s)'
+                      : 'Computer clock';
+    pill($('stClock'), tsTxt, ts.ok ? 'ok' : 'bad');
 
     // device indicators
     var d = s.device;
