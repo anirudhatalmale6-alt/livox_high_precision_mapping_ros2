@@ -635,7 +635,7 @@ Requested from the field: the status line under the buttons only ever shows
 what is happening *now*, so a run that started and finished while nobody was at
 the screen left no trace. On a unit driven by a pushbutton, that is most runs.
 
-The Controls card now carries a RECENT ACTIVITY box listing the last five
+The Controls card now carries an ACTION WINDOW box listing the last five
 things that happened, newest first, each with a clock time:
 
 ```
