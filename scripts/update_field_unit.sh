@@ -140,6 +140,18 @@ IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 CODE=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ 2>/dev/null)
 if [ "$CODE" = "200" ]; then
   ok "Dashboard is up — open  http://${IP:-<pi-ip>}:8080"
+  # The button and LED disable themselves rather than taking the dashboard
+  # down, and say so in the log. That is the right behaviour, but the message
+  # only helps if somebody reads it - the pushbutton sat broken for days with
+  # the reason sitting in the journal the whole time.
+  HW_OFF=$(journalctl -u mapper-field --since '-2 min' --no-pager 2>/dev/null \
+             | grep -E 'pushbutton disabled|status LED disabled' | tail -2)
+  if [ -n "$HW_OFF" ]; then
+    echo
+    warn "The unit started, but some hardware disabled itself:"
+    printf '%s\n' "$HW_OFF" | sed 's/^/      /'
+    warn "Send me those lines - the dashboard works either way."
+  fi
 else
   warn "The dashboard did not answer yet. Give it another 30 s and reload the page."
   warn "If it still does not come up, run:  bash scripts/collect_diag.sh"

@@ -593,6 +593,42 @@ before it cost anything.
 
 ---
 
+## 26. The pushbutton: an exception thrown one line too early
+
+`list_gpio.sh test 0:100` settled the hardware question — resting value 1, 18
+clean transitions, "this IS your button". The wiring and the line number were
+right all along. The fault was in `gpio.py`:
+
+```python
+flags = _lgpio.SET_PULL_UP if active_low else _lgpio.SET_PULL_DOWN
+try:
+    _lgpio.gpio_claim_input(self._h, line, flags)
+except Exception:
+    _lgpio.gpio_claim_input(self._h, line)      # fall back to no bias
+```
+
+Current lgpio calls that constant `SET_BIAS_PULL_UP`. On this board the
+attribute lookup raised `AttributeError` while *building the argument* — on the
+line above the `try`, so the fallback that existed for precisely this case
+never ran. The exception escaped `InputPin.__init__`, `PushButton` caught it and
+disabled itself.
+
+`OutputPin` claims an output and needs no bias flag, so it was untouched. That
+is the whole reason the LED worked while the button did not — a detail that
+looked like a wiring difference and was actually a missing attribute.
+
+Both constant spellings are now resolved by lookup, and the lookup happens
+inside the guarded region. Verified against stubbed lgpio builds using the new
+naming, the old naming, and no bias flags at all; the previous revision was run
+against the same stub to confirm it fails exactly as observed on the unit.
+
+The message *was* printed — `[mapper_web] pushbutton disabled ... no attribute
+'SET_PULL_UP'` — into the service journal, where nobody looked for days.
+`update_field_unit.sh` now greps for that line and any LED equivalent after
+restarting, so hardware that disables itself says so where it will be seen.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message

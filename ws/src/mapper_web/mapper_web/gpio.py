@@ -59,6 +59,23 @@ def _chip_handle(chip):
         return _chips[chip]
 
 
+def _bias_flag(*names):
+    """First of `names` that this lgpio build actually defines, else 0.
+
+    lgpio renamed these between versions: SET_BIAS_PULL_UP on current releases,
+    SET_PULL_UP on older ones. Referring to the wrong one raises AttributeError
+    while the argument is being BUILT - before the claim call it was meant for,
+    and so before any try/except around that call can catch it. That is exactly
+    how the pushbutton came to be silently disabled on the Orange Pi while the
+    LED, which needs no bias flag, kept working.
+    """
+    for n in names:
+        v = getattr(_lgpio, n, None)
+        if v is not None:
+            return v
+    return 0
+
+
 class OutputPin:
     """One output line. set(True/False). Never raises after construction."""
     def __init__(self, spec):
@@ -127,9 +144,13 @@ class InputPin:
                 raise RuntimeError('lgpio not installed - needed for %s' % spec)
             _, chip, line = p
             self._h = _chip_handle(chip)
-            flags = _lgpio.SET_PULL_UP if active_low else _lgpio.SET_PULL_DOWN
+            flags = (_bias_flag('SET_BIAS_PULL_UP', 'SET_PULL_UP') if active_low
+                     else _bias_flag('SET_BIAS_PULL_DOWN', 'SET_PULL_DOWN'))
             try:
-                _lgpio.gpio_claim_input(self._h, line, flags)
+                if flags:
+                    _lgpio.gpio_claim_input(self._h, line, flags)
+                else:
+                    _lgpio.gpio_claim_input(self._h, line)
             except Exception:
                 # Not every SoC exposes bias control; fall back to a plain
                 # input and rely on an external resistor.
