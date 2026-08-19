@@ -20,3 +20,7 @@ sync cable *.jpg
 # diagnostics collected from a client machine — may contain credentials
 mapper_diag.txt
 mapper_build.log
+
+# client screenshots pasted into chat (dashboard, pinouts) — not ours to publish
+image.png
+image.jpg

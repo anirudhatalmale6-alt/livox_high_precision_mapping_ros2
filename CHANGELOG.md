@@ -406,6 +406,39 @@ dashboard still serves).
 
 ---
 
+## 19. Telling "the IMU is slow" apart from "the IMU data is being lost"
+
+The dashboard reported the Avia's IMU at ~50 Hz where 200 Hz was expected.
+`check_rates.sh` confirmed the number, but a number alone cannot say *why* — a
+sensor sampling at 50 Hz and a sensor sampling at 200 Hz with three quarters of
+its packets lost produce exactly the same rate.
+
+`scripts/check_imu_rate.sh` records both the arrival time and the device
+timestamp of every message, then reads the gaps:
+
+- **Any gap near 5 ms** ⇒ the Avia *is* sampling at 200 Hz. Downstream loss
+  cannot manufacture a gap shorter than the sensor produces, so this is
+  conclusive, and the problem is between the LiDAR and the board.
+- **Gaps that vary across multiples of 5 ms** (5/10/15/20…) ⇒ packets are being
+  lost irregularly, which is what real loss looks like.
+- **Every gap identical to the millisecond** ⇒ the sensor's own clock. Packet
+  loss is never that regular over thousands of samples, so this is the Avia
+  pacing itself, and the fix is a LiDAR setting rather than a wiring one.
+
+A separate check guards the whole analysis: if the timestamps track the host
+clock, they are the driver's, not the device's, and the script says so and
+abstains instead of reading meaning into them. Network `rx_dropped`/`rx_errors`
+counters are sampled either side of the window, since a USB-attached Ethernet
+adapter loses packets on the USB bus rather than the network.
+
+Verified against four simulated captures — a genuinely slow sensor, 200 Hz with
+irregular loss, 200 Hz delivered in bursts, and host-stamped messages — each of
+which the script classifies correctly. The first draft did not: it read
+perfectly periodic loss as a slow sensor, which is what prompted the shortest-gap
+and uniformity tests that replaced it.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message
