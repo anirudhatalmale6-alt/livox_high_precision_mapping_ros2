@@ -24,3 +24,7 @@ mapper_build.log
 # client screenshots pasted into chat (dashboard, pinouts) — not ours to publish
 image.png
 image.jpg
+
+# renders made from the client's scans - same privacy as the .pcd itself
+scan_overview*.png
+livox_map_*.png
