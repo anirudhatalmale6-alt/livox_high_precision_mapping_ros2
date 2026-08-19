@@ -48,8 +48,15 @@ import time
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu, PointCloud2
+
+# The IMU arrives in bursts of ~20 every ~100 ms. qos_profile_sensor_data keeps
+# only the last 5, so most of a burst is discarded before any callback runs -
+# the tool would report the size of its own queue rather than the rate being
+# published.
+BURST_QOS = QoSProfile(depth=2000, history=HistoryPolicy.KEEP_LAST,
+                       reliability=ReliabilityPolicy.BEST_EFFORT)
 
 SECS = float(os.environ.get('SECS', '10'))
 TOPICS = [('/livox/lidar', PointCloud2), ('/livox/imu', Imu)]
@@ -82,8 +89,7 @@ for name, msg_type in TOPICS:
         q = p.qos_profile
         print('  %-14s %s / %s   (publisher: %s)' % (
             name, q.reliability.name, q.durability.name, p.node_name))
-    node.create_subscription(msg_type, name, make_cb(name),
-                             qos_profile_sensor_data)
+    node.create_subscription(msg_type, name, make_cb(name), BURST_QOS)
 
 print('')
 print('Measuring for %d seconds...' % SECS)

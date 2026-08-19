@@ -100,8 +100,16 @@ import time
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu
+
+# The IMU arrives in bursts of ~20 every ~100 ms. qos_profile_sensor_data keeps
+# only the last 5, so most of a burst is discarded before any callback runs -
+# the tool would report the size of its own queue rather than the rate being
+# published. That is exactly the mistake this script exists to catch, so it
+# must not make it itself.
+BURST_QOS = QoSProfile(depth=2000, history=HistoryPolicy.KEEP_LAST,
+                       reliability=ReliabilityPolicy.BEST_EFFORT)
 
 SECS = float(os.environ.get('SECS', '15'))
 
@@ -128,7 +136,7 @@ for p in info:
     print('  publisher: %s   %s / %s' % (p.node_name, q.reliability.name,
                                          q.durability.name))
 
-node.create_subscription(Imu, '/livox/imu', cb, qos_profile_sensor_data)
+node.create_subscription(Imu, '/livox/imu', cb, BURST_QOS)
 
 executor = SingleThreadedExecutor()
 executor.add_node(node)

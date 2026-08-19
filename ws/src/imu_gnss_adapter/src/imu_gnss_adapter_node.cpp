@@ -35,11 +35,22 @@ public:
     // x-axis, added to the GNSS heading before it replaces the IMU yaw.
     heading_offset_deg_ = declare_parameter<double>("heading_offset_deg", 0.0);
 
+    // The Avia's IMU samples at 200 Hz, but the Livox driver only drains its
+    // IMU queue when point-cloud data wakes its publish loop - so the samples
+    // arrive in bursts of roughly 20 every 100 ms rather than evenly spaced.
+    //
+    // rclcpp::SensorDataQoS() is KeepLast(5). A burst of 20 into a queue of 5
+    // silently discards three quarters of it, which is why 200 Hz was reaching
+    // the mapper as about 50. The mapping node already asks for a deep history
+    // for exactly this reason; this adapter sits in between and was throwing
+    // the samples away before they could ever get there.
+    auto imu_qos = rclcpp::QoS(rclcpp::KeepLast(2000)).best_effort();
+
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>(
-      "/gnss_inertial/imu", rclcpp::SensorDataQoS());
+      "/gnss_inertial/imu", imu_qos);
 
     imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
-      input_topic_, rclcpp::SensorDataQoS(),
+      input_topic_, imu_qos,
       std::bind(&ImuGnssAdapter::imuCbk, this, std::placeholders::_1));
 
     if (use_gnss_heading_)

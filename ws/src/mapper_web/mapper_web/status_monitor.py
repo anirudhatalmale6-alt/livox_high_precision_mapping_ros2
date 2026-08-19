@@ -24,7 +24,8 @@ try:
     from rclpy.executors import SingleThreadedExecutor
     from sensor_msgs.msg import Imu, NavSatFix, PointCloud2
     from std_msgs.msg import Float64, String
-    from rclpy.qos import qos_profile_sensor_data
+    from rclpy.qos import (qos_profile_sensor_data, QoSProfile,
+                           HistoryPolicy, ReliabilityPolicy)
     _HAVE_ROS = True
 except Exception:
     _HAVE_ROS = False
@@ -118,10 +119,18 @@ class StatusMonitor:
         gnss_state = {'fix': 'No fix', 'sats': 0, 't': 0.0}
         dev_state = {'device': None, 't': 0.0}
 
+        # The IMU arrives in bursts of ~20 every ~100 ms (the Livox driver only
+        # drains its IMU queue when point-cloud data wakes its publish loop).
+        # qos_profile_sensor_data keeps the last 5, so most of each burst was
+        # dropped before the counter saw it and the row read ~50 Hz for a
+        # 200 Hz sensor. Count what is actually being sent.
+        burst_qos = QoSProfile(depth=2000,
+                               history=HistoryPolicy.KEEP_LAST,
+                               reliability=ReliabilityPolicy.BEST_EFFORT)
         node.create_subscription(PointCloud2, '/livox/lidar',
-                                 lambda m: lidar.tick(), qos_profile_sensor_data)
+                                 lambda m: lidar.tick(), burst_qos)
         node.create_subscription(Imu, '/livox/imu',
-                                 lambda m: imu.tick(), qos_profile_sensor_data)
+                                 lambda m: imu.tick(), burst_qos)
 
         def on_fix(m):
             gnss_state['fix'] = _FIX.get(int(m.status.status), 'No fix')

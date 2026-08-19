@@ -527,6 +527,68 @@ reversible, and the alternative is a unit that silently cannot record.
 
 ---
 
+## 24. The missing 150 Hz: a queue five messages deep
+
+`check_imu_rate.sh` finally answered it. Three facts from one 15-second capture:
+
+- **Device timestamps are 5 ms apart** (72% of gaps). The Avia genuinely samples
+  at 200 Hz — downstream loss cannot manufacture a gap shorter than the sensor
+  produces, so this is conclusive.
+- **Arrivals come in clumps**: samples 1–2 ms apart, then a pause of 93–96 ms.
+- **Zero packets dropped** on the LiDAR's interface over the same window.
+
+So nothing is lost on the wire, and the sensor is fine. The 93–96 ms period is
+the giveaway: it is the point-cloud publish cycle. In the Livox driver,
+`Lds::StorageRawPacket` signals the semaphore only in the point-cloud branch,
+and `Lddc::DistributeLidarData` waits on that semaphore before draining the IMU
+queue. IMU samples therefore accumulate for a full point-cloud period and are
+then released ~20 at a time.
+
+A burst of 20 into `SensorDataQoS` — which is `KeepLast(5)` — loses most of it
+before a single callback runs. The shortfall is consistent with that: about
+5–6 samples survived per burst.
+
+The damaging part was not the dashboard number. `imu_gnss_adapter` sits between
+the driver and the mapper and used `SensorDataQoS` on **both** its subscription
+and its publisher, so it discarded three quarters of the IMU stream before the
+mapping node ever saw it. The mapping node already asks for `KeepLast(20000)`
+for exactly this reason — that depth was being wasted on a stream already
+thinned upstream. Maps built so far had roughly 54 Hz of IMU, not 200 Hz.
+
+Every consumer of a bursty sensor stream now uses a deep best-effort queue: the
+adapter (subscribe and publish), the dashboard's rate counter, and both
+diagnostic scripts. The scripts especially — a measuring tool that reports the
+size of its own queue instead of the rate being published is worse than no tool
+at all, which is the mistake this one was written to catch.
+
+Smoothing the driver's own delivery (signalling the semaphore when IMU data
+arrives, not only point-cloud data) would remove the burstiness at source. It
+is not required for correctness — the samples carry device timestamps, so a
+deep queue preserves the data and the timing — and it would mean rebuilding the
+driver on the unit, so it is left as an option rather than done by default.
+
+## 25. Why the PPS row stays red, and what it would actually take
+
+The PPS cable was replaced and the row still reads `No PPS`. The wire was never
+the whole story: a Livox LiDAR will not report time sync from pulses alone. It
+needs the pulse *and* a time message telling it which second the pulse belongs
+to — `enable_timesync` in the driver config, with `device_name` set to a serial
+port carrying NMEA. That has always been `false` here.
+
+It cannot simply be switched on. The port that carries the NMEA is `/dev/gps`,
+and `um982_driver` already holds it open; two readers on one serial port
+corrupt each other. The UM982 board has a second TTL port, so the honest
+options are a second USB-serial adapter wired to it, or leaving hardware sync
+off.
+
+Leaving it off is not a failure. Scans are already on satellite time through
+the software path — the Scan Clock row reads `GPS time (-0.041 s)`. Hardware
+PPS sync buys sharper per-point deskew at speed, not correct timestamps; those
+are already correct. Documented rather than implemented, because it needs a
+hardware decision.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message
