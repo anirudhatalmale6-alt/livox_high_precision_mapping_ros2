@@ -118,6 +118,20 @@ else
   warn "/etc/mapper/field.env is missing — run: bash scripts/setup_field_unit.sh"
 fi
 
+# ---- sensor names -------------------------------------------------------------
+# A missing /dev/gps is silent from the outside: the GPS driver has nothing to
+# open, so no position is published, no RTK corrections are pushed to the
+# receiver, and the scan clock quietly falls back to the computer clock. The
+# receiver itself is fine throughout, which makes it look like a GPS fault.
+step "Checking the sensor names"
+if [ -e /dev/gps ]; then
+  ok "/dev/gps -> $(readlink -f /dev/gps 2>/dev/null || echo '?')"
+else
+  warn "/dev/gps is MISSING - the GPS cannot be opened, so there will be no"
+  warn "position, no RTK, and no satellite time. The receiver is probably fine."
+  warn "Fix it with:  bash scripts/setup_sensor_names.sh"
+fi
+
 # ---- start it again ----------------------------------------------------------
 step "Starting the field unit"
 sudo systemctl start mapper-field
