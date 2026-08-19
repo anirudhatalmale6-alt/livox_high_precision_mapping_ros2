@@ -145,9 +145,32 @@ chip, line = int(chip), int(line)
 h = lgpio.gpiochip_open(chip)
 
 mode = None
-for flags, label in ((lgpio.SET_PULL_UP, 'internal pull-up'),
-                     (lgpio.SET_PULL_DOWN, 'internal pull-down'),
-                     (0, 'no bias (needs an external resistor)')):
+# lgpio spells these two ways depending on version: SET_BIAS_PULL_UP on
+# current releases, SET_PULL_UP on older ones. Ask for whichever exists rather
+# than picking one and crashing on the other.
+def _flag(*names):
+    for n in names:
+        v = getattr(lgpio, n, None)
+        if v is not None:
+            return v
+    return 0
+
+
+PULL_UP = _flag('SET_BIAS_PULL_UP', 'SET_PULL_UP')
+PULL_DOWN = _flag('SET_BIAS_PULL_DOWN', 'SET_PULL_DOWN')
+
+# Only offer a bias mode this build can actually do. Listing one whose flag
+# resolved to 0 would claim the line with no bias at all and then report it as
+# "internal pull-up" - a wrong answer that sends you looking for a wiring fault
+# when the real message is that you need an external resistor.
+MODES = []
+if PULL_UP:
+    MODES.append((PULL_UP, 'internal pull-up'))
+if PULL_DOWN:
+    MODES.append((PULL_DOWN, 'internal pull-down'))
+MODES.append((0, 'no bias (needs an external resistor)'))
+
+for flags, label in MODES:
     try:
         lgpio.gpio_claim_input(h, line, flags) if flags else \
             lgpio.gpio_claim_input(h, line)
@@ -213,6 +236,18 @@ except ImportError:
     print("  python3-lgpio not installed:  sudo apt install -y python3-lgpio")
     raise SystemExit(1)
 
+# Same version split as in the test path: SET_BIAS_PULL_UP on current lgpio,
+# SET_PULL_UP on older builds.
+def _flag(*names):
+    for n in names:
+        v = getattr(lgpio, n, None)
+        if v is not None:
+            return v
+    return 0
+
+
+PULL_UP = _flag('SET_BIAS_PULL_UP', 'SET_PULL_UP')
+
 watch = []
 for dev in sorted(glob.glob('/dev/gpiochip*')):
     n = int(dev.replace('/dev/gpiochip', ''))
@@ -226,7 +261,7 @@ for dev in sorted(glob.glob('/dev/gpiochip*')):
         lgpio.gpiochip_close(h); continue
     for line in range(min(nlines, 64)):
         try:
-            lgpio.gpio_claim_input(h, line, lgpio.SET_PULL_UP)
+            lgpio.gpio_claim_input(h, line, PULL_UP)
             watch.append((n, h, line, lgpio.gpio_read(h, line)))
         except Exception:
             pass          # already owned by the kernel - skip it
