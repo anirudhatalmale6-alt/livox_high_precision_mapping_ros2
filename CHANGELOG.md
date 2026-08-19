@@ -629,6 +629,44 @@ restarting, so hardware that disables itself says so where it will be seen.
 
 ---
 
+## 27. Recent activity: what the unit did while you were not watching
+
+Requested from the field: the status line under the buttons only ever shows
+what is happening *now*, so a run that started and finished while nobody was at
+the screen left no trace. On a unit driven by a pushbutton, that is most runs.
+
+The Controls card now carries a RECENT ACTIVITY box listing the last five
+things that happened, newest first, each with a clock time:
+
+```
+14:32:07  Saved map_004.pcd (3m 41s)
+14:28:26  Recording started (button)
+14:21:03  Start aborted - no RTK fix
+```
+
+Four moments are recorded: recording started, saved (with the filename and how
+long the run lasted), start aborted with what was missing, and launch failed.
+Entries say whether the button or the dashboard triggered them, which is worth
+knowing on a unit you press and then walk away from. The run duration is read
+before `record_started` is cleared, since that is the one number you want after
+the fact and it is gone a line later.
+
+The list is written to `/var/lib/mapper/events.json` and reloaded at startup,
+so powering the unit up in the field does not show an empty box — precisely
+when the last run matters most. Every read and write is guarded: a missing,
+corrupt or unwritable history file leaves the unit recording maps exactly as
+before.
+
+Rendered with `textContent` rather than `innerHTML`. These strings carry
+filenames and error text from the unit, and a stray angle bracket in a filename
+must not be able to rewrite the page; verified with a filename containing an
+`<img onerror=...>` payload, which renders as literal text.
+
+Checked at 1280px and on a 390px phone viewport with no horizontal scroll, and
+against an empty list, a full list, and a hostile filename.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message

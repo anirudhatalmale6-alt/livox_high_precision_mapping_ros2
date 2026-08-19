@@ -15,6 +15,16 @@ import time
 from . import state as st
 
 
+def _duration(started):
+    """' (2m 14s)' for a run that began at `started`, or '' if unknown."""
+    if not started:
+        return ''
+    secs = int(time.time() - started)
+    if secs < 0:
+        return ''
+    return ' (%dm %02ds)' % (secs // 60, secs % 60)
+
+
 class LoggingController:
     def __init__(self, shared, usb, led=None, simulate=False,
                  workspace='/opt/mapper/ws', mount_point='/media/log',
@@ -30,6 +40,7 @@ class LoggingController:
         # gate logging on satellite time being live, not the computer clock
         self.require_gps_time = require_gps_time
         self._proc = None
+        self._source = 'dashboard'
         self._lock = threading.Lock()
         # Wired by the LiDAR control link once the forked driver is running: a
         # callable(dict) -> (ok, msg) that pushes settings to the Avia via SDK.
@@ -39,10 +50,13 @@ class LoggingController:
         return self.s.get('logging_state') in (st.INITIAL, st.ACTIVE)
 
     # ---- start ------------------------------------------------------------
-    def start(self):
+    def start(self, source='dashboard'):
         with self._lock:
             if self.is_logging():
                 return False, 'already logging'
+            # Who pressed it matters on a unit you drive from a button and
+            # then walk away from.
+            self._source = source
             # Phase 1: initial data logging - spin the head up, run checks.
             self.s.update(logging_state=st.INITIAL,
                           log_message='Initial data logging - spinning up + checks')
@@ -64,6 +78,7 @@ class LoggingController:
             return
         self.s.update(logging_state=st.ACTIVE, record_started=time.time(),
                       log_message='Active logging - recording to USB')
+        self.s.add_event('Recording started (%s)' % self._source)
 
     def _data_checks(self, timeout_s=60):
         deadline = time.time() + timeout_s
@@ -94,6 +109,7 @@ class LoggingController:
             if self.on_fail == 'abort' or time.time() > deadline:
                 self.s.update(logging_state=st.IDLE,
                               log_message='Start aborted - ' + ', '.join(missing) + ' not ready')
+                self.s.add_event('Start aborted - no ' + ', '.join(missing))
                 if self.led:
                     self.led.error_blink()
                     self.led.set_logging(False)
@@ -126,15 +142,17 @@ class LoggingController:
             return True
         except OSError as e:
             self.s.update(logging_state=st.IDLE, log_message='Launch failed: ' + str(e))
+            self.s.add_event('Launch failed: %s' % e)
             if self.led:
                 self.led.set_logging(False)
             return False
 
     # ---- stop -------------------------------------------------------------
-    def stop(self):
+    def stop(self, source='dashboard'):
         with self._lock:
             if not self.is_logging():
                 return False, 'not logging'
+            self._source = source
             self.s.update(logging_state=st.STOPPING,
                           log_message='Stopping - saving map + spinning down')
         threading.Thread(target=self._stop_sequence, daemon=True).start()
@@ -159,9 +177,16 @@ class LoggingController:
         # Safely eject the USB so it can be pulled.
         if not self.simulate:
             self.usb.eject()
+        # Read the start time BEFORE it is cleared, so the entry can say how
+        # long the run actually was - the one number you want afterwards.
+        began = self.s.get('record_started')
         self.s.update(logging_state=st.IDLE, record_started=0.0,
                       last_map=last,
                       log_message='Idle - saved ' + (last or 'no map') + ', USB safe to remove')
+        if last:
+            self.s.add_event('Saved %s%s' % (last, _duration(began)))
+        else:
+            self.s.add_event('Stopped - no map file was written')
         if self.led:
             self.led.set_logging(False)
 
@@ -207,5 +232,6 @@ class LoggingController:
         self._config_sink = fn
 
     # ---- toggle (button) --------------------------------------------------
-    def toggle(self):
-        return self.stop() if self.is_logging() else self.start()
+    def toggle(self, source='button'):
+        return (self.stop(source) if self.is_logging()
+                else self.start(source))

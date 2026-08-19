@@ -4,6 +4,8 @@
 # logging controller, USB manager and GPIO button all update it; the web server
 # (REST + SSE) reads it. A single lock keeps it consistent across threads.
 import copy
+import json
+import os
 import threading
 import time
 
@@ -71,6 +73,12 @@ class MapperState:
                 'path': '',
             },
 
+            # Recent activity, newest first. The status line under the buttons
+            # only ever shows what is happening NOW, so a run that started and
+            # finished while you were away from the screen left no trace - and
+            # on a unit driven by a button, that is most of them.
+            'events': [],                # [{t, time, text}], newest first
+
             # button / LED feedback
             'button_hint': '',           # transient "logging armed" / "shutdown armed"
             'updated': time.time(),
@@ -99,3 +107,51 @@ class MapperState:
     def get(self, key):
         with self._lock:
             return copy.deepcopy(self._d[key])
+
+    def add_event(self, text, keep=5):
+        """Record one thing that happened, newest first.
+
+        Kept deliberately short: this is the "what did it just do" box, not a
+        log file. The service journal is still the place for detail.
+        """
+        with self._lock:
+            now = time.time()
+            self._d['events'].insert(0, {
+                't': now,
+                'time': time.strftime('%H:%M:%S', time.localtime(now)),
+                'text': str(text),
+            })
+            del self._d['events'][keep:]
+            events = list(self._d['events'])
+        self._save_events(events)
+
+    # ---- persistence ------------------------------------------------------
+    # Held in a small file so the box is not empty every time the unit is
+    # powered up in the field - which is exactly when you want to see what the
+    # last run did. Never allowed to break anything: a unit that cannot write
+    # its history still records maps perfectly well.
+    def set_events_path(self, path):
+        self.events_path = path
+        try:
+            with open(path) as f:
+                loaded = json.load(f)
+            if isinstance(loaded, list):
+                with self._lock:
+                    self._d['events'] = [e for e in loaded if isinstance(e, dict)][:5]
+        except (OSError, ValueError):
+            pass
+
+    def _save_events(self, events):
+        path = getattr(self, 'events_path', '')
+        if not path:
+            return
+        try:
+            d = os.path.dirname(path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            tmp = path + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(events, f)
+            os.replace(tmp, path)     # never leave a half-written file behind
+        except OSError:
+            pass

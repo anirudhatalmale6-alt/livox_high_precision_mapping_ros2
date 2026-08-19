@@ -60,3 +60,14 @@ select{background:#101a24;border:1px solid var(--line);color:var(--ink);
   background:#0b1119;border:1px solid var(--line);color:var(--ink);padding:11px 18px;border-radius:10px;
   font-size:13px;opacity:0;pointer-events:none;transition:.25s;box-shadow:0 8px 30px rgba(0,0,0,.4)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Recent activity: the last few starts/stops, so a run that happened while
+   nobody was at the screen still leaves a visible trace. */
+.recent{margin-top:14px;border-top:1px solid var(--line);padding-top:11px}
+.recent-h{font-size:10px;letter-spacing:.09em;color:var(--mut);margin-bottom:7px}
+.recent-l{list-style:none;margin:0;padding:0;font-size:12.5px}
+.recent-l li{display:flex;gap:10px;padding:4px 0;color:var(--ink);
+  border-bottom:1px solid rgba(255,255,255,.04)}
+.recent-l li:last-child{border-bottom:0}
+.recent-l .t{color:var(--mut);font-variant-numeric:tabular-nums;flex:none}
+.recent-l .x{overflow-wrap:anywhere}

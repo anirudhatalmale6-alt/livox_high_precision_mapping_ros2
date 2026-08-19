@@ -56,6 +56,11 @@ class App:
     def __init__(self, opts):
         self.opts = opts
         self.state = MapperState()
+        # Recent-activity history survives a reboot. Not in simulate mode -
+        # a demo should not leave state on the machine it ran on.
+        if not opts.simulate:
+            self.state.set_events_path(
+                os.environ.get('MAPPER_EVENTS_FILE', '/var/lib/mapper/events.json'))
         self.usb = UsbManager(mount_point=opts.mount_point, simulate=opts.simulate)
         self.led = StatusLed(red=opts.led_red, green=opts.led_green,
                              blue=opts.led_blue, mono=opts.led_gpio,

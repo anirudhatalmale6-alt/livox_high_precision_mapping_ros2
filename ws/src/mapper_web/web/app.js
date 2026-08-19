@@ -55,6 +55,32 @@
     var logging = (s.logging_state === 'active_logging' || s.logging_state === 'initial_data_logging');
     $('recDot').className = 'recdot' + (logging ? ' live' : '');
 
+    // Recent activity. Built with textContent rather than innerHTML: these
+    // strings include filenames and error text from the unit, and one stray
+    // angle bracket in a filename should not be able to rewrite the page.
+    var list = $('recentList');
+    var evs = s.events || [];
+    list.textContent = '';
+    if (!evs.length) {
+      var empty = document.createElement('li');
+      empty.className = 'muted';
+      empty.textContent = 'Nothing recorded yet';
+      list.appendChild(empty);
+    } else {
+      evs.forEach(function (e) {
+        var li = document.createElement('li');
+        var t = document.createElement('span');
+        t.className = 't';
+        t.textContent = e.time || '';
+        var x = document.createElement('span');
+        x.className = 'x';
+        x.textContent = e.text || '';
+        li.appendChild(t);
+        li.appendChild(x);
+        list.appendChild(li);
+      });
+    }
+
     // buttons: block start unless idle + USB healthy; block stop unless logging
     var usbOk = s.usb && s.usb.mounted && s.usb.free_gb >= 1;
     $('btnStart').disabled = logging || !usbOk;

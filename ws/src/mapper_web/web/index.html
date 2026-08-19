@@ -37,6 +37,16 @@
         </div>
         <div class="rec"><span class="recdot" id="recDot"></span> <b id="logState">Idle</b>
           <span id="logMsg" class="muted"></span></div>
+
+        <!-- The status line above only says what is happening NOW. A run that
+             started and finished while nobody was watching the screen left no
+             trace, which on a button-driven unit is most of them. -->
+        <div class="recent">
+          <div class="recent-h">RECENT ACTIVITY</div>
+          <ul id="recentList" class="recent-l">
+            <li class="muted">Nothing recorded yet</li>
+          </ul>
+        </div>
       </div>
     </div>
 
