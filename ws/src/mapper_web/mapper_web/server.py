@@ -73,10 +73,16 @@ class App:
                                  simulate=opts.simulate)
 
     def start(self):
+        # Mount the stick at boot rather than waiting for someone to open the
+        # dashboard - the button has to work on a unit with no screen attached.
+        self.refresh_usb()
         self.monitor.start()
 
     def refresh_usb(self):
-        self.state.update(usb=self.usb.status())
+        s = self.usb.status()
+        if self.usb.ensure_mounted(s):
+            s = self.usb.status()      # it tried; report the result, not the guess
+        self.state.update(usb=s)
 
 
 class Handler(BaseHTTPRequestHandler):

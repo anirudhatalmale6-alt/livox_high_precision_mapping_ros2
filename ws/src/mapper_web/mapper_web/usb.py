@@ -13,6 +13,7 @@ import re
 import os
 import shutil
 import subprocess
+import time
 
 
 class UsbManager:
@@ -20,6 +21,7 @@ class UsbManager:
         self.fallback_mount = mount_point   # only used if auto-detect finds nothing
         self.device_hint = device_hint      # force a device, e.g. /dev/sda1
         self.simulate = simulate
+        self._last_mount_try = -1e9   # rate-limits ensure_mounted()
         self._sim = {
             'present': True, 'mounted': True, 'label': 'SIM-USB',
             'total_gb': 128.0, 'free_gb': 80.6, 'free_pct': 63,
@@ -65,8 +67,32 @@ class UsbManager:
         s = self.status()
         return s['path'] if s['mounted'] else ''
 
+    def ensure_mounted(self, current=None, retry_after_s=10.0):
+        """Mount a detected stick that isn't mounted yet. Returns True if a
+        mount was attempted, so the caller knows to re-read the status.
+
+        A unit that needs someone to press ATTACH before it can record is not
+        "power on and go" - and an unmounted stick otherwise just stalls the
+        pre-flight checks until they time out, with nothing saying why. Safe to
+        do automatically: detection excludes the system disk, and mounting is
+        reversible.
+        """
+        if self.simulate:
+            return False
+        s = current if current is not None else self.status()
+        if not s['present'] or s['mounted']:
+            return False
+        now = time.monotonic()
+        if now - self._last_mount_try < retry_after_s:
+            return False        # don't hammer a stick that keeps refusing
+        self._last_mount_try = now
+        self.mount()
+        return True
+
     def healthy_for_logging(self, min_free_gb=1.0):
         s = self.status()
+        if self.ensure_mounted(s):
+            s = self.status()
         return s['mounted'] and s['free_gb'] >= min_free_gb
 
     # ---- operations -------------------------------------------------------

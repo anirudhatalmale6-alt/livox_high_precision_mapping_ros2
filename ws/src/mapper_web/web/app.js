@@ -63,9 +63,12 @@
     // sensor health
     pill($('stLidar'), s.lidar.ok ? 'Streaming ' + s.lidar.rate_hz + ' Hz' : 'Waiting', s.lidar.ok ? 'ok' : 'bad');
     pill($('stImu'), s.imu.ok ? 'Streaming ' + s.imu.rate_hz + ' Hz' : 'Waiting', s.imu.ok ? 'ok' : 'bad');
+    // Show what the backend actually determined. Overwriting it with a blanket
+    // "No fix" hid the difference between a receiver that is searching and one
+    // that is not connected at all.
     var gfix = s.gnss.fix + (s.gnss.sats ? ' - ' + s.gnss.sats + ' sats' : '');
     var gcls = s.gnss.ok ? (/rtk/i.test(s.gnss.fix) ? 'ok' : 'warn') : 'bad';
-    pill($('stGnss'), s.gnss.ok ? gfix : 'No fix', gcls);
+    pill($('stGnss'), gfix, gcls);
     // Which clock the scan is stamped with. Red when it is the computer clock:
     // that is a silent fallback, and a scan on a wrong clock looks normal until
     // the data is analysed.

@@ -491,6 +491,42 @@ chased through the hardware.
 
 ---
 
+## 22. "No fix" was hiding which of two faults you had
+
+The GNSS row showed `No fix` both when the receiver was connected and still
+searching, and when it was not talking to the unit at all — unplugged, wrong
+serial port, driver not running. Those call for opposite responses (wait, or go
+and check a cable), and the row gave no way to tell them apart. It cost real
+time on a live unit.
+
+The row now distinguishes three states: the live fix quality when messages are
+arriving, `Not connected` when none ever have, and `Receiver silent` when they
+were arriving and stopped. The page previously overwrote the backend's answer
+with a blanket `No fix` whenever the data was stale, so the frontend had to be
+fixed alongside it — the label is now whatever the backend determined.
+
+The decision is a plain function, `status_monitor.gnss_label()`, so it is
+testable without a running ROS graph. All four states are also verified through
+the real page by feeding its own SSE channel, which confirms both the text and
+the colour (red for not-connected and silent, amber for searching, green for
+RTK).
+
+## 23. The stick mounts itself
+
+Recording needs the USB stick mounted, but nothing mounted it — the dashboard
+had an ATTACH button and the pre-flight checks simply retried for 60 s and gave
+up, with nothing on screen explaining why. On a unit meant to be operated by a
+single button, with no screen attached, that is a dead end.
+
+`UsbManager.ensure_mounted()` now mounts a detected stick if it is not mounted
+already, rate-limited to one attempt per 10 s so a stick that keeps refusing is
+not hammered. It runs at service start, on each dashboard status refresh, and
+inside `healthy_for_logging()` so the button path is covered too. This is only
+safe because detection now excludes the system disk (section 20); mounting is
+reversible, and the alternative is a unit that silently cannot record.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message

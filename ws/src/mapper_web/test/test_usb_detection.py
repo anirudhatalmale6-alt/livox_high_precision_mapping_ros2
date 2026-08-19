@@ -101,6 +101,38 @@ else:
     print('  FAIL  never reached mkfs')
     fails.append('E')
 
+
+
+# ---- auto-mount --------------------------------------------------------------
+print('F) a detected-but-unmounted stick is mounted without anyone pressing ATTACH')
+m, _ = make([EMMC, USB_UNMOUNTED])
+tried = []
+m.mount = lambda: tried.append(1) or (True, 'mounted')
+check('mount attempted', m.ensure_mounted(), True)
+check('exactly one attempt', len(tried), 1)
+check('immediate retry is rate-limited', m.ensure_mounted(), False)
+check('still one attempt', len(tried), 1)
+
+print('G) nothing is auto-mounted when it should not be')
+m, _ = make([EMMC, USB_MOUNTED])
+m.mount = lambda: (_ for _ in ()).throw(AssertionError('mounted an already-mounted stick'))
+check('already mounted -> no attempt', m.ensure_mounted(), False)
+
+m, _ = make([EMMC])          # OS disk only, no stick
+m.mount = lambda: (_ for _ in ()).throw(AssertionError('mounted with no stick present'))
+check('no stick -> no attempt', m.ensure_mounted(), False)
+
+m = UsbManager(simulate=True)
+m.mount = lambda: (_ for _ in ()).throw(AssertionError('mounted in simulate mode'))
+check('simulate -> no attempt', m.ensure_mounted(), False)
+
+print('H) GNSS row must distinguish "searching" from "not connected"')
+from mapper_web.status_monitor import gnss_label
+check('live RTK fix',        gnss_label('RTK Fixed', 100.0, 101.0), ('RTK Fixed', True))
+check('live, still searching', gnss_label('No fix', 100.0, 101.0), ('No fix', True))
+check('never heard from',    gnss_label('No fix', 0.0, 500.0), ('Not connected', False))
+check('was talking, stopped', gnss_label('RTK Fixed', 100.0, 200.0), ('Receiver silent', False))
+
 print('')
 print('FAILURES: %d' % len(fails))
 sys.exit(1 if fails else 0)

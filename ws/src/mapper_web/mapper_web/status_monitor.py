@@ -51,6 +51,21 @@ _UNKNOWN_DEVICE = {
 }
 
 
+def gnss_label(fix, last_msg_t, now, stale_after=3.0):
+    """What to show on the GNSS row: (label, is_live).
+
+    "No fix" used to cover two completely different faults - a receiver that is
+    connected and still searching, and one that is not talking to us at all
+    (unplugged, wrong port, driver down). They call for opposite responses, so
+    they must not share a label.
+    """
+    if last_msg_t and (now - last_msg_t) < stale_after:
+        return fix, True
+    if not last_msg_t:
+        return 'Not connected', False
+    return 'Receiver silent', False
+
+
 class _RateTracker:
     """Rolling message rate over a short window.
 
@@ -155,10 +170,10 @@ class StatusMonitor:
             time.sleep(0.2)
             self.s.merge('lidar', ok=lidar.alive(), rate_hz=lidar.hz())
             self.s.merge('imu', ok=imu.alive(), rate_hz=imu.hz())
-            gnss_ok = (time.time() - gnss_state['t']) < 3.0
-            self.s.merge('gnss', ok=gnss_ok,
-                         fix=gnss_state['fix'] if gnss_ok else 'No fix',
-                         sats=gnss_state['sats'])
+            gnss_fix, gnss_ok = gnss_label(gnss_state['fix'], gnss_state['t'],
+                                           time.time())
+            self.s.merge('gnss', ok=gnss_ok, fix=gnss_fix,
+                         sats=gnss_state['sats'] if gnss_ok else 0)
             # 5 s: the offset is republished with every GPS fix (~1 Hz), so
             # anything older than a few seconds means it has stopped.
             ts_ok = (time.time() - tsync['t']) < 5.0
