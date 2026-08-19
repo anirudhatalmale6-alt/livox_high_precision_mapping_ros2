@@ -20,6 +20,19 @@ SECS="${1:-10}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/ws"
 
+# ---- must run as root --------------------------------------------------------
+# The field service runs as root, so ROS2's shared-memory segments in /dev/shm
+# belong to root. An ordinary user discovers the publishers over the network but
+# receives nothing at all - which looks precisely like an unplugged sensor, and
+# was in fact misread as one here.
+if [ "$(id -u)" != "0" ]; then
+  echo "  (re-running as root - ROS2 shared memory belongs to the field service)"
+  if sudo -E true 2>/dev/null; then
+    exec sudo -E bash "$SCRIPT_DIR/$(basename "$0")" "$@"
+  fi
+  exec sudo bash "$SCRIPT_DIR/$(basename "$0")" "$@"
+fi
+
 set +u
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
@@ -105,16 +118,20 @@ if silent == len(TOPICS):
     # the driver is running and has advertised its topics, but the device is
     # not feeding it. That is hardware, not software.
     print('BOTH topics are silent while their publishers exist.')
-    print('That means the Livox driver is running and has advertised the')
-    print('topics, but the LiDAR is not sending it anything. The IMU is inside')
-    print('the Avia, so no LiDAR means no IMU either - both go quiet together.')
     print('')
-    print('Check, in this order:')
+    print('This script runs as root, so the usual cause - shared-memory')
+    print('segments owned by the root-run field service and unreadable by an')
+    print('ordinary user - is already ruled out. This is genuinely no data.')
+    print('')
+    print('The IMU is inside the Avia, so no LiDAR means no IMU either; both')
+    print('go quiet together. Check, in this order:')
     print('  1. Is the Avia powered and its cable connected?')
-    print('     (mid-rewiring is the usual reason)')
     print('  2. Is it on the network?   ping 192.168.1.1xx  (the LiDAR IP)')
     print('  3. Is the unit running?    systemctl status mapper-field')
     print('  4. Driver log:             journalctl -u mapper-field -n 50')
+    print('  5. Compare with the dashboard: if the web page shows the topics')
+    print('     streaming while this shows nothing, the fault is here, not on')
+    print('     the hardware - tell me and I will fix the tool.')
 else:
     print('Expected: /livox/lidar about 10 Hz, /livox/imu about 200 Hz.')
     print('If the IMU comes out near 200, the dashboard was under-counting and')

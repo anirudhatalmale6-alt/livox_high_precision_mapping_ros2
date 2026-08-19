@@ -36,6 +36,24 @@ WS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/ws"
 GREEN='\033[1;32m'; YELLOW='\033[1;33m'; BLUE='\033[1;34m'; NC='\033[0m'
 step() { echo -e "\n${BLUE}==== $* ====${NC}"; }
 
+# ---- must run as root --------------------------------------------------------
+# mapper-field.service runs as root, so every ROS node on this box is root's.
+# ROS2 hands messages between processes on the same machine through shared
+# memory in /dev/shm, and those segments are owned by root. A subscriber running
+# as an ordinary user still DISCOVERS the publishers over the network - so the
+# topic looks alive and `get_publishers_info_by_topic` lists it - but not one
+# message is ever delivered.
+#
+# That is indistinguishable from a dead sensor, and it fooled this script once
+# already. So don't allow the situation to arise.
+if [ "$(id -u)" != "0" ]; then
+  echo "  (re-running as root - ROS2 shared memory belongs to the field service)"
+  if sudo -E true 2>/dev/null; then
+    exec sudo -E bash "$SCRIPT_DIR/$(basename "$0")" "$@"
+  fi
+  exec sudo bash "$SCRIPT_DIR/$(basename "$0")" "$@"
+fi
+
 set +u
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
@@ -124,6 +142,13 @@ rclpy.shutdown()
 
 n = len(arrivals)
 print('  received %d messages' % n)
+if n == 0:
+    print('')
+    print('  A publisher exists but nothing arrived. Running as root rules out')
+    print('  the shared-memory permission problem, so this time it really is')
+    print('  no data: the Avia is not sending, or the driver is not reading it.')
+    print('  Check:  journalctl -u mapper-field -n 50')
+    raise SystemExit(0)
 if n < 20:
     print('  Too few to analyse.')
     raise SystemExit(0)

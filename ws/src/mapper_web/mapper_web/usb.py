@@ -9,6 +9,7 @@
 # in" works. Everything degrades gracefully so the service still runs on a box
 # with no USB attached (simulation).
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -117,12 +118,71 @@ class UsbManager:
         dev = self.device_hint or (f['device'] if f else '')
         if not dev:
             return False, 'no USB device found'
+        # Last line of defence. _find() already skips the system disk, but a
+        # device_hint bypasses it and a wrong answer here erases the OS, so the
+        # check is repeated at the point of no return.
+        if self._is_system_device(dev):
+            return False, ('refusing to format ' + dev + ' - that is the disk '
+                           'this system boots from, not a USB stick')
         if f and f['mountpoint']:
             self._run(['udisksctl', 'unmount', '-b', dev])
         rc, out = self._run(['mkfs.vfat', '-F', '32', '-n', label, dev])
         if rc == 0:
             self.mount()
         return rc == 0, out.strip() or 'formatted'
+
+    # ---- what must never be touched ---------------------------------------
+    # An SD card or eMMC is reported by the kernel as removable/hotplug exactly
+    # like a USB stick. On an Orange Pi that is the disk the OS boots from, so
+    # "removable" on its own picked the system disk as the logging target - and
+    # offered to format it. Nothing here may act on the disk carrying the OS.
+    SYSTEM_PATHS = ('/', '/boot', '/boot/firmware', '/usr', '/var', '/home')
+
+    @staticmethod
+    def _parent_disk(name):
+        """'mmcblk0p1' -> 'mmcblk0', 'sda1' -> 'sda', 'sda' -> 'sda'.
+
+        Read from sysfs rather than by trimming the name, because the naming
+        rules differ between sd*, mmcblk* and nvme*.
+        """
+        base = '/sys/class/block/' + name
+        try:
+            if os.path.exists(base + '/partition'):
+                return os.path.basename(os.path.dirname(os.path.realpath(base)))
+            if os.path.exists(base):
+                return name              # sysfs says it is a whole disk
+        except OSError:
+            pass
+        # sysfs could not answer (container, unusual kernel). This guard is what
+        # stops the OS being formatted, so fall back to the naming rules rather
+        # than returning a name that matches no disk and protects nothing.
+        m = re.match(r'^(.*\d)p\d+$', name)      # mmcblk0p1, nvme0n1p2
+        if m:
+            return m.group(1)
+        if name.startswith(('mmcblk', 'nvme', 'loop')):
+            return name       # whole disk - its digits are part of the name
+        return name.rstrip('0123456789')          # sda1 -> sda
+
+    def _system_disks(self):
+        """Disks carrying the OS. Never a logging target, never formattable."""
+        protected = set()
+        for path in self.SYSTEM_PATHS:
+            # --target answers for the filesystem CONTAINING the path, so this
+            # works whether or not /boot is a separate mount.
+            rc, out = self._run(['findmnt', '-no', 'SOURCE', '--target', path])
+            if rc != 0 or not out:
+                continue
+            src = out.strip().split('\n')[0].strip()
+            if not src.startswith('/dev/'):
+                continue                   # overlay, tmpfs, zfs - not a disk
+            protected.add(self._parent_disk(os.path.basename(src)))
+        protected.discard('')
+        return protected
+
+    def _is_system_device(self, dev):
+        if not dev:
+            return False
+        return self._parent_disk(os.path.basename(dev)) in self._system_disks()
 
     # ---- detection --------------------------------------------------------
     def _find(self):
@@ -137,10 +197,13 @@ class UsbManager:
         except ValueError:
             return None
 
+        protected = self._system_disks()
         best = None
         for disk in tree:
             if disk.get('type') != 'disk':
                 continue
+            if disk.get('name') in protected:
+                continue                   # the OS lives here - skip entirely
             removable = (disk.get('tran') == 'usb'
                          or str(disk.get('hotplug')) in ('1', 'True', 'true')
                          or str(disk.get('rm')) in ('1', 'True', 'true'))
@@ -153,8 +216,11 @@ class UsbManager:
             # prefer a mounted candidate, else the first with a filesystem
             cands.sort(key=lambda c: (0 if c.get('mountpoint') else 1))
             for c in cands:
+                mp = c.get('mountpoint') or ''
+                if mp in self.SYSTEM_PATHS or mp.startswith('/boot'):
+                    continue               # belt and braces
                 cand = {'device': '/dev/' + c['name'],
-                        'mountpoint': c.get('mountpoint') or '',
+                        'mountpoint': mp,
                         'label': c.get('label') or '',
                         'fstype': c.get('fstype') or ''}
                 if cand['mountpoint']:

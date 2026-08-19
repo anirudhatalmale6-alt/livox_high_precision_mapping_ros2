@@ -439,6 +439,58 @@ and uniformity tests that replaced it.
 
 ---
 
+## 20. The dashboard was offering to format the operating system
+
+On the Orange Pi the Storage panel showed `opi_root`, 121.8 GB, Mounted — the
+board's own system disk, with a FORMAT button next to it. The USB stick the
+client had actually plugged in was ignored.
+
+The detection treated any disk the kernel marks removable or hotplug as a
+candidate. That is a sound rule on a Raspberry Pi booting from USB, but an SD
+card and eMMC are reported as removable too, so on this board the disk holding
+the OS matched first, was already mounted at `/`, and won outright.
+
+Three consequences, in order of severity: FORMAT would have run `mkfs.vfat`
+over the root filesystem; logs would have been written to the system disk
+rather than the USB stick, which the design explicitly forbids; and the real
+stick never appeared.
+
+Detection now resolves which disks carry the OS (`findmnt --target` for `/`,
+`/boot`, `/usr`, `/var`, `/home`, mapped to their parent disk through sysfs)
+and skips them entirely, regardless of how removable they claim to be.
+`format()` repeats the check against its resolved target immediately before
+`mkfs`, because a caller-supplied `device_hint` bypasses detection and there is
+no recovering from a wrong answer at that point.
+
+Covered by tests for: OS disk alone (reports no USB rather than offering the
+system disk), OS disk plus an unmounted stick, OS disk plus a mounted stick,
+format refused on the system disk, and format still reaching `mkfs` on a
+genuine USB.
+
+## 21. Diagnostics saw nothing while the dashboard saw everything
+
+`check_rates.sh` and `check_imu_rate.sh` reported zero messages on topics the
+dashboard was showing as live. The publishers were discovered; not one message
+arrived.
+
+`mapper-field.service` runs as root, so every ROS node belongs to root. ROS2
+moves messages between processes on one machine through shared memory in
+`/dev/shm`, and those segments are root's. A subscriber run by an ordinary user
+still discovers publishers over the network — so the topic looks alive and
+`get_publishers_info_by_topic` lists it — but receives nothing.
+
+The failure is indistinguishable from an unplugged sensor, and was read as
+exactly that once: an earlier all-quiet result was attributed to the LiDAR
+being unpowered mid-rewiring, which the evidence did not actually support.
+
+Both scripts now re-exec themselves under `sudo` before touching ROS, falling
+back to plain `sudo` where `sudo -E` is not permitted. Their all-quiet messages
+now state that the permission cause is already excluded, and invite a
+comparison against the dashboard so a tool fault is reported as one rather than
+chased through the hardware.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message
