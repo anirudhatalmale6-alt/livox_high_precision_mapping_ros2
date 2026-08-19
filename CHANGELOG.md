@@ -567,25 +567,29 @@ is not required for correctness — the samples carry device timestamps, so a
 deep queue preserves the data and the timing — and it would mean rebuilding the
 driver on the unit, so it is left as an option rather than done by default.
 
-## 25. Why the PPS row stays red, and what it would actually take
+Confirmed on the unit: the INS / IMU row reads **198 Hz**, up from 54.
 
-The PPS cable was replaced and the row still reads `No PPS`. The wire was never
-the whole story: a Livox LiDAR will not report time sync from pulses alone. It
-needs the pulse *and* a time message telling it which second the pulse belongs
-to — `enable_timesync` in the driver config, with `device_name` set to a serial
-port carrying NMEA. That has always been `false` here.
+## 25. PPS: it was the wiring after all
 
-It cannot simply be switched on. The port that carries the NMEA is `/dev/gps`,
-and `um982_driver` already holds it open; two readers on one serial port
-corrupt each other. The UM982 board has a second TTL port, so the honest
-options are a second USB-serial adapter wired to it, or leaving hardware sync
-off.
+The row reads `PPS sync`. Rewiring fixed it, with `enable_timesync` still
+`false` — so the claim recorded here first, that pulses alone could never
+produce a sync state, was wrong.
 
-Leaving it off is not a failure. Scans are already on satellite time through
-the software path — the Scan Clock row reads `GPS time (-0.041 s)`. Hardware
-PPS sync buys sharper per-point deskew at speed, not correct timestamps; those
-are already correct. Documented rather than implemented, because it needs a
-hardware decision.
+The error was conflating two distinct states in the Livox status word. `PPS
+sync` (3) means the LiDAR is receiving the pulse and disciplining its clock to
+that edge; the hardware pulse alone is sufficient for it. `GPS sync` (2) is the
+stronger state where the LiDAR also knows which absolute UTC second the pulse
+belongs to, and *that* is what needs a time message over serial —
+`enable_timesync` with `device_name` pointing at a port carrying NMEA.
+
+`GPS sync` remains unavailable without extra hardware, since `/dev/gps` is held
+open by `um982_driver` and two readers on one serial port corrupt each other.
+It is also unnecessary: absolute time already reaches the scans through the
+software path (the Scan Clock row), and the pulse edge — the part that sharpens
+per-point deskew — is now being used.
+
+The recommendation to buy a second USB-serial adapter was therefore withdrawn
+before it cost anything.
 
 ---
 
