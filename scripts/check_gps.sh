@@ -36,7 +36,30 @@ if [ -z "$PORT" ]; then
 fi
 if [ -z "$PORT" ] || [ ! -e "$PORT" ]; then
   bad "No serial port found. Is the GPS plugged in?"
-  echo "    Check with:  ls -l /dev/ttyUSB*  and  lsusb"
+  # Exiting with just that line sends you looking at the wrong thing. The two
+  # cases below need completely different fixes, so name which one it is.
+  echo
+  step "What the Pi can actually see"
+  ADAPTERS=$(lsusb 2>/dev/null | grep -iE "1a86|CH340|CP210|FTDI|Prolific|067b" || true)
+  if [ -n "$ADAPTERS" ]; then
+    ok "a USB-serial adapter IS plugged in:"
+    printf '%s\n' "$ADAPTERS" | sed 's/^/      /'
+    echo
+    warn "So the adapter is there but no /dev/ttyUSB* appeared for it."
+    echo "      That is a driver/permissions thing, not a cable thing. Send me:"
+    echo "        dmesg | tail -30"
+  else
+    bad "no USB-serial adapter visible at all."
+    echo "      The Pi cannot see the adapter, so nothing downstream of it can"
+    echo "      work. Check the USB plug at both ends, and try the other socket."
+  fi
+  echo
+  echo "  Serial devices present right now:"
+  ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | sed 's/^/      /' || \
+    echo "      (none)"
+  if [ -L /dev/gps ]; then
+    warn "/dev/gps exists but points at $(readlink /dev/gps), which is gone."
+  fi
   exit 1
 fi
 
