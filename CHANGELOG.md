@@ -713,6 +713,58 @@ band.
 
 ---
 
+## 29. Changing the return type crashed the driver
+
+**Symptom:** setting Echo/Return Type to Double Return killed the Livox driver
+outright. From the field unit, twice inside ten minutes:
+
+```
+17:56:16 lidar_cmd: sent to LiDAR: echo_type=Double Return
+17:56:16 realloc(): invalid old size
+17:56:16 process has died [pid 14229, exit code -6]     <- SIGABRT
+18:05:48 lidar_cmd: sent to LiDAR: echo_type=Double Return
+18:05:48 process has died [pid 17135, exit code -11]    <- SIGSEGV
+```
+
+`realloc(): invalid old size` is glibc catching a corrupted heap. Both deaths
+are the same fault landing slightly differently.
+
+**Cause:** in `lddc.cpp`, the point-convert handler was chosen from
+`lidar->raw_data_type` — the mode the LiDAR is in *now*. But every handler in
+`lds.cpp` sizes its own write loop from `eth_packet->data_type` — the format of
+*this packet*. Those are the same value except during a return-mode change,
+when the LiDAR's type has already moved to dual while the queue still holds
+packets of the old single-return type.
+
+Give a single-return packet to the dual handler and it reads 96 points from the
+packet, then doubles the count because doubling is what the dual handler does:
+
+| lidar says | packet is | points written | budget |
+|---|---|---|---|
+| dual | single | **192** | 100 |
+| triple | single | **288** | 100 |
+| worst pair | | **300** | 100 |
+
+`kMaxPointPerEthPacket` is 100, so the buffer is sized at 100 points per
+packet. Writing 192 runs straight off the end of the heap.
+
+This is also why it looked intermittent, and why it cost three days: whether it
+crashes depends on how many stale-type packets happen to be queued when the
+switch lands. The same command by hand at 17:18 went through cleanly and four
+scans were recorded afterwards.
+
+**Fix:** all three publish paths (PointCloud2, PointXyzrtl, CustomMsg) now take
+both `echo_num` and the handler from the packet's own `data_type`, so the two
+can never disagree. Plus a per-packet bounds check that drops a packet claiming
+more than the budget rather than letting it overrun.
+
+`test/test_return_mode_overflow.cpp` in the driver repo models the arithmetic
+against the real data-type table — every steady-state type fits, the old rule
+overruns on the mixed pairs, and all 64 lidar/packet combinations are safe
+under the new one. It needs neither a LiDAR nor ROS to run.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message
