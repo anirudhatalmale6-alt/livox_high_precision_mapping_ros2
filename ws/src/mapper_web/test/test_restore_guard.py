@@ -70,10 +70,28 @@ def fresh_state():
     s.set_config_path(os.path.join(d, 'cfg_%d.json' % len(os.listdir(d))))
     return s
 
+print('the restore payload is only what the operator changed, one per command')
+stp = fresh_state()
+p0 = FakeApp(stp)._restore_payload()
+check('nothing changed -> nothing to send', p0, [])
+stp.merge('config', echo_type='Double Return')
+p1 = FakeApp(stp)._restore_payload()
+check('one change -> one command', p1, [{'echo_type': 'Double Return'}])
+stp.merge('config', coordinate='Spherical')
+p2 = FakeApp(stp)._restore_payload()
+check('two changes -> two separate commands', len(p2), 2)
+check('never batched into one', all(len(c) == 1 for c in p2), True)
+stp.merge('config', work_mode='Standby', rtk_source='Serial')
+p3 = FakeApp(stp)._restore_payload()
+keys = sorted(k for c in p3 for k in c)
+check('work_mode and rtk_source are never replayed', keys,
+      ['coordinate', 'echo_type'])
+
 print('a restore whose LiDAR keeps streaming clears the marker')
 os.environ['MAPPER_RESTORE_MARKER'] = marker
 App._clear_marker(marker)
 stg = fresh_state()
+stg.merge('config', echo_type='Single - Strongest Return')
 stg.merge('lidar', ok=True, rate_hz=10.0)
 g = FakeApp(stg)
 g.RESTORE_PROOF_S = 0.2
@@ -84,7 +102,8 @@ check('marker cleared - restore judged safe', App._read_marker(marker), 0)
 print('a restore whose LiDAR goes silent LEAVES the strike behind')
 App._clear_marker(marker)
 sth = fresh_state()
-sth.merge('lidar', ok=False, rate_hz=0.0)      # the driver died
+sth.merge('config', echo_type='Double Return')
+sth.merge('lidar', ok=False, rate_hz=0.0)      # the LiDAR stopped
 h = FakeApp(sth)
 h.RESTORE_PROOF_S = 0.2
 h._restore_lidar_config()

@@ -100,6 +100,42 @@ class App:
     # we know cannot take the driver down with it.
     SAFE_ECHO = 'Single - First Return'
 
+    # Seconds between the individual commands of a restore.
+    RESTORE_GAP_S = 3.0
+
+    # Never replayed at startup.
+    #
+    # rtk_source is not a LiDAR setting at all. work_mode is excluded for a
+    # sharper reason: sending "Working Normally" makes the driver call
+    # LidarSetMode(Normal), which schedules a sampling RESTART - and the
+    # client's log shows that restart landing a full two minutes later
+    # ("device reached Normal - restarting sampling"). The device is already
+    # sampling when we get here, so the command buys nothing and costs a
+    # restart landing on top of whatever else we just changed. Restoring
+    # Standby or Power Saving would be worse still: the unit would come back
+    # from a reboot not scanning, with nothing on screen to say why.
+    RESTORE_SKIP = ('rtk_source', 'work_mode')
+
+    def _restore_payload(self):
+        """The restore, as a list of one-setting commands.
+
+        Two deliberate reductions, both from the same evidence.
+
+        The client set Double Return by hand at 17:18 and it applied perfectly:
+        DataType 2 -> 4, ack 0, and four scans recorded after it. The SAME
+        value, replayed by this restore at 17:43 as part of one six-setting
+        command, stopped the LiDAR dead. So the value is fine and the batch is
+        not - six SDK calls arriving together, one of which restarts sampling.
+
+        So: send only what the operator actually changed away from stock (the
+        driver applies coordinate, return mode and IMU rate from its own config
+        file at connect anyway), and send them one at a time.
+        """
+        defaults = MapperState().get('config')
+        cfg = self.state.get('config')
+        return [{k: v} for k, v in cfg.items()
+                if k not in self.RESTORE_SKIP and defaults.get(k) != v]
+
     def _restore_lidar_config(self):
         """Push the saved LiDAR settings back to the device once it is up.
 
@@ -148,18 +184,23 @@ class App:
             return
 
         def worker():
+            steps = self._restore_payload()
+            if not steps:
+                return          # everything is already at stock; nothing to do
             deadline = time.time() + 120
             while time.time() < deadline:
-                cfg = {k: v for k, v in self.state.get('config').items()
-                       if k != 'rtk_source'}
                 # Straight to the control link, not through
                 # apply_lidar_config(): that reports success when the link is
                 # not up yet ("saved - applies once ... running"), which is the
                 # honest answer to a person pressing APPLY but would end this
                 # retry loop before anything reached the device.
                 self._write_marker(marker, strikes + 1)
-                ok, msg = self.monitor.send_command(cfg)
+                ok, msg = self.monitor.send_command(steps[0])
                 if ok:
+                    # One command at a time, with a gap. See _restore_payload.
+                    for extra in steps[1:]:
+                        time.sleep(self.RESTORE_GAP_S)
+                        self.monitor.send_command(extra)
                     self.state.add_event('LiDAR settings restored')
                     # Judge the restore on the LiDAR itself, not on the clock.
                     # "Did the unit stay up" would also be satisfied by the
