@@ -89,6 +89,11 @@
     // sensor health
     pill($('stLidar'), s.lidar.ok ? 'Streaming ' + s.lidar.rate_hz + ' Hz' : 'Waiting', s.lidar.ok ? 'ok' : 'bad');
     pill($('stImu'), s.imu.ok ? 'Streaming ' + s.imu.rate_hz + ' Hz' : 'Waiting', s.imu.ok ? 'ok' : 'bad');
+    // Whether the LiDAR can still be COMMANDED. Power Saving stops the data on
+    // purpose, so a red LiDAR stream row is not necessarily a fault - but a red
+    // control row means you cannot tell it to come back, which always is.
+    pill($('stLink'), s.control_link ? 'Reachable' : 'Not reachable',
+         s.control_link ? 'ok' : 'bad');
     // Show what the backend actually determined. Overwriting it with a blanket
     // "No fix" hid the difference between a receiver that is searching and one
     // that is not connected at all.
@@ -209,6 +214,11 @@
   $('btnApplyRtk').onclick = function () {
     post('/api/config', { rtk_source: $('cfgRtk').value })
       .then(function () { clearEdited(['cfgRtk']); });
+  };
+  $('btnRestartSensors').onclick = function () {
+    confirmPost('/api/system/restart-sensors',
+      'Restart the LiDAR and GPS drivers? The dashboard will drop for about ' +
+      '30 seconds and come back on its own. Nothing recorded is affected.');
   };
   $('btnUsbAttach').onclick = function () { post('/api/usb/attach'); };
   $('btnUsbDetach').onclick = function () {

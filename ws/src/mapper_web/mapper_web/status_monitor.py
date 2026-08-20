@@ -207,7 +207,14 @@ class StatusMonitor:
                 self.s.merge('device', **dev_state['device'])
             else:
                 self.s.merge('device', **_UNKNOWN_DEVICE)
-            self.s.update(connected=lidar.alive())
+            # Whether the LiDAR driver is actually reachable for COMMANDS.
+            # Distinct from `connected`, which is about data arriving: after
+            # the LiDAR is put into Power Saving the data stops by design, and
+            # the operator's next question is whether they can still command it
+            # back. That used to be answerable only by pressing APPLY and
+            # reading the error.
+            self.s.update(connected=lidar.alive(),
+                          control_link=self.link_up())
         with self._cmd_lock:
             self._cmd_pub = None
         executor.shutdown()
@@ -238,6 +245,19 @@ class StatusMonitor:
         return dev
 
     # ---- command sink (registered on the LoggingController) --------------
+    def link_up(self):
+        """True when a LiDAR driver is subscribed to the control link."""
+        if self.simulate:
+            return True
+        with self._cmd_lock:
+            pub = self._cmd_pub
+        if pub is None:
+            return False
+        try:
+            return pub.get_subscription_count() > 0
+        except Exception:
+            return True      # can't tell - don't report a fault we didn't see
+
     def send_command(self, cfg):
         """Publish a LiDAR config command to the driver. cfg is the dict of
         LiDAR settings from the dashboard APPLY (echo/work/imu/scan/coord/
@@ -270,7 +290,7 @@ class StatusMonitor:
 
     # ---- simulator (dev box) ---------------------------------------------
     def _sim_loop(self):
-        self.s.update(connected=True)
+        self.s.update(connected=True, control_link=True)
         self.s.merge('lidar', ok=True, rate_hz=10.0)
         self.s.merge('imu', ok=True, rate_hz=200.0)
         self.s.merge('gnss', ok=True, fix='RTK Fixed', sats=28)

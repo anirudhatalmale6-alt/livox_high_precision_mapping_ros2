@@ -305,6 +305,8 @@ class Handler(BaseHTTPRequestHandler):
                 ok, msg = self.app.usb.eject(); self.app.refresh_usb()
             elif path == '/api/usb/format':
                 ok, msg = self.app.usb.format(); self.app.refresh_usb()
+            elif path == '/api/system/restart-sensors':
+                ok, msg = self._restart_sensors()
             elif path == '/api/system/restart':
                 ok, msg = self._system('reboot')
             elif path == '/api/system/shutdown':
@@ -359,6 +361,32 @@ class Handler(BaseHTTPRequestHandler):
             return True, 'ok'
         except OSError as e:
             return False, 'could not save RTK source (' + str(e) + ')'
+
+    def _restart_sensors(self):
+        """Restart the whole field service - drivers and this dashboard.
+
+        Putting the LiDAR into Power Saving stops the laser, and the command to
+        bring it back has to travel the same control link. If that link is down
+        the LiDAR cannot be woken from the dashboard at all, and recovery meant
+        an SSH session or a full reboot of the machine. This is the smaller
+        hammer.
+
+        --no-block matters: without it systemd would stop this very process
+        while it is still trying to write the HTTP response, and the browser
+        would show a failure for something that actually worked.
+        """
+        if self.app.opts.simulate:
+            return True, 'sensors restarted (sim)'
+        import subprocess
+        cmd = ['systemctl', 'restart', '--no-block', 'mapper-field']
+        if os.geteuid() != 0:
+            cmd = ['sudo', '-n'] + cmd
+        try:
+            subprocess.Popen(cmd)
+        except OSError as e:
+            return False, 'could not restart the sensors: ' + str(e)
+        return True, ('restarting the drivers - the dashboard will drop for '
+                      'about 30 s and come back on its own')
 
     def _system(self, action):
         if self.app.opts.simulate:

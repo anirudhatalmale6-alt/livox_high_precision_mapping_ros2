@@ -35,6 +35,12 @@
           <button class="btn slate" id="btnRestart">SYSTEM RESTART</button>
           <button class="btn red" id="btnShutdown">SYSTEM SHUTDOWN</button>
         </div>
+        <!-- Power Saving stops the laser, and the command to bring it back
+             has to travel the same link. Without a way to restart just the
+             sensors, recovering meant an SSH session or a full reboot. -->
+        <div class="row2" style="margin-top:10px">
+          <button class="btn slate" id="btnRestartSensors">RESTART SENSORS</button>
+        </div>
         <div class="rec"><span class="recdot" id="recDot"></span> <b id="logState">Idle</b>
           <span id="logMsg" class="muted"></span></div>
 
@@ -56,6 +62,7 @@
       <div class="body">
         <div class="kv">
           <div class="ind"><span class="lab">LiDAR stream</span><span class="pill" id="stLidar">&mdash;</span></div>
+          <div class="ind"><span class="lab">LiDAR control</span><span class="pill" id="stLink">&mdash;</span></div>
           <div class="ind"><span class="lab">INS / IMU</span><span class="pill" id="stImu">&mdash;</span></div>
           <div class="ind"><span class="lab">GNSS</span><span class="pill" id="stGnss">&mdash;</span></div>
           <div class="ind"><span class="lab">Scan Clock</span><span class="pill" id="stClock">&mdash;</span></div>
