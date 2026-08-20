@@ -36,6 +36,8 @@ def plane_rms(pts):
     tilt = np.degrees(np.arccos(min(1.0, abs(nrm[2]))))
     return float(np.sqrt((d ** 2).mean()) * 1000.0), tilt
 
+MIN_RANGE = 0.5   # must match livox_mapping's min_range default
+
 for path in sys.argv[1:]:
     xyz, hdr = load(path)
     n = len(xyz)
@@ -48,8 +50,26 @@ for path in sys.argv[1:]:
     print('  duration approx %.1f s  (at 240k pts/s)' % (n / 240000.0))
     print('  bbox            %.1f x %.1f x %.1f m' % tuple(bbox))
     print('  min range       %.2f m' % r.min())
-    print('  pts within 0.5m %d  -> %s' % (near,
+    print('  pts within 0.5m %d (%.1f%%)  -> %s' % (near, 100.0 * near / n,
           'single viewpoint (stationary)' if near > 2000 else 'sensor moved'))
+
+    # Everything below is measured on the REAL returns only.
+    #
+    # A no-return is reported as (0,0,0) and the pose transform drops it on the
+    # scanner, so these pile up in a few centimetres at the origin. Left in,
+    # they are by far the densest band in the cloud - and the "floor" band below
+    # picks the densest band, so it would measure the pile rather than the
+    # floor and report a flatness that belongs to nothing. One capture was 60%
+    # no-returns and gave 13.3 mm that way, against 21.6 mm for its actual floor.
+    xyz = xyz[r >= MIN_RANGE]
+    if len(xyz) < 500:
+        print('  (nothing left beyond %.2f m - no real returns to measure)'
+              % MIN_RANGE)
+        continue
+    print('  real returns    %d (%.1f%% of the file)' % (len(xyz),
+          100.0 * len(xyz) / n))
+    print('  bbox of those   %.1f x %.1f x %.1f m' % tuple(np.ptp(xyz, axis=0)))
+
     # densest horizontal 10 cm band = floor
     z = xyz[:, 2]
     lo, hi = np.percentile(z, [1, 99])

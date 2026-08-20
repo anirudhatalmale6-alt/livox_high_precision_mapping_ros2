@@ -28,3 +28,4 @@ image.jpg
 # renders made from the client's scans - same privacy as the .pcd itself
 scan_overview*.png
 livox_map_*.png
+dash_check.png

@@ -16,6 +16,7 @@
 import argparse
 import json
 import os
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -61,6 +62,9 @@ class App:
         if not opts.simulate:
             self.state.set_events_path(
                 os.environ.get('MAPPER_EVENTS_FILE', '/var/lib/mapper/events.json'))
+            self.state.set_config_path(
+                os.environ.get('MAPPER_CONFIG_FILE',
+                               '/var/lib/mapper/lidar_config.json'))
         self.usb = UsbManager(mount_point=opts.mount_point, simulate=opts.simulate)
         self.led = StatusLed(red=opts.led_red, green=opts.led_green,
                              blue=opts.led_blue, mono=opts.led_gpio,
@@ -82,6 +86,41 @@ class App:
         # dashboard - the button has to work on a unit with no screen attached.
         self.refresh_usb()
         self.monitor.start()
+        self._restore_lidar_config()
+
+    def _restore_lidar_config(self):
+        """Push the saved LiDAR settings back to the device once it is up.
+
+        The Avia comes up on whatever is in the Livox driver's own config file,
+        so a setting chosen on the dashboard is lost at every restart - the
+        panel would go on displaying it while the device had reverted. Without
+        this the client's "Single - Strongest Return", which visibly produced
+        his best scan, would silently be first-return again after a reboot.
+
+        Runs in the background: the control link needs the driver to be up, and
+        nothing here is allowed to delay the dashboard coming online.
+        """
+        if self.opts.simulate:
+            return
+
+        def worker():
+            deadline = time.time() + 120
+            while time.time() < deadline:
+                cfg = {k: v for k, v in self.state.get('config').items()
+                       if k != 'rtk_source'}
+                # Straight to the control link, not through
+                # apply_lidar_config(): that reports success when the link is
+                # not up yet ("saved - applies once ... running"), which is the
+                # honest answer to a person pressing APPLY but would end this
+                # retry loop before anything reached the device.
+                ok, msg = self.monitor.send_command(cfg)
+                if ok:
+                    self.state.add_event('LiDAR settings restored')
+                    return
+                time.sleep(3.0)
+            self.state.add_event('Could not restore LiDAR settings')
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def refresh_usb(self):
         s = self.usb.status()
@@ -125,6 +164,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.app.state.merge('config', **{k: body[k] for k in
                                      CONFIG_KEYS if k in body})
                 ok, msg = self._apply_config(body)
+                # Saved even when the device rejected it: the panel shows what
+                # was chosen, and the panel must not go back to disagreeing
+                # with itself after a restart.
+                self.app.state.save_config()
             elif path == '/api/usb/check':
                 self.app.refresh_usb(); ok, msg = True, 'checked'
             elif path == '/api/usb/attach':

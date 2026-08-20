@@ -142,7 +142,34 @@ class MapperState:
             pass
 
     def _save_events(self, events):
-        path = getattr(self, 'events_path', '')
+        self._write_json(getattr(self, 'events_path', ''), events)
+
+    # The LiDAR settings have to survive a restart too, and for a sharper
+    # reason than the event list. The dashboard shows what is in 'config'; the
+    # device is brought up from the Livox driver's own config file. Losing the
+    # saved settings does not just blank the panel, it makes the panel state
+    # something the LiDAR is not - it read "Single - First Return" while the
+    # client's chosen "Single - Strongest Return" had quietly been lost at the
+    # last restart.
+    def set_config_path(self, path):
+        self.config_path = path
+        try:
+            with open(path) as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                with self._lock:
+                    for k, v in loaded.items():
+                        if k in self._d['config'] and isinstance(v, str):
+                            self._d['config'][k] = v
+        except (OSError, ValueError):
+            pass
+
+    def save_config(self):
+        with self._lock:
+            cfg = dict(self._d['config'])
+        self._write_json(getattr(self, 'config_path', ''), cfg)
+
+    def _write_json(self, path, obj):
         if not path:
             return
         try:
@@ -151,7 +178,7 @@ class MapperState:
                 os.makedirs(d, exist_ok=True)
             tmp = path + '.tmp'
             with open(tmp, 'w') as f:
-                json.dump(events, f)
+                json.dump(obj, f)
             os.replace(tmp, path)     # never leave a half-written file behind
-        except OSError:
+        except (OSError, ValueError, TypeError):
             pass

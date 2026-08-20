@@ -123,6 +123,7 @@
 
     // reflect the applied config into the dropdowns (only when not being edited)
     var c = s.config || {};
+    lastConfig = c;
     setSel('cfgEcho', c.echo_type);
     setSel('cfgWork', c.work_mode);
     setSel('cfgImu', c.imu_freq);
@@ -136,6 +137,9 @@
   // overwrite these on the ~2 Hz status refresh, or the dropdown snaps back
   // before they can hit APPLY. Cleared when they apply (the value then matches).
   var edited = {};
+
+  // Last config the server reported, so APPLY can tell what actually changed.
+  var lastConfig = {};
 
   // Set a <select> to a value unless the user is picking in it or has an
   // unsaved change pending.
@@ -174,16 +178,33 @@
   });
   function clearEdited(ids) { ids.forEach(function (id) { edited[id] = false; }); }
 
+  // Send only the settings that actually changed.
+  //
+  // Every one of these becomes a separate command to the LiDAR, and Work Mode
+  // in particular restarts sampling. Posting all six on every APPLY meant that
+  // nudging one dropdown quietly re-issued five other commands to a device that
+  // was working fine - a much bigger disturbance than the one the operator
+  // asked for, and a much bigger surface for something to go wrong on.
+  var CFG_FIELDS = [
+    ['cfgEcho', 'echo_type'], ['cfgWork', 'work_mode'],
+    ['cfgImu', 'imu_freq'], ['cfgScan', 'scan_mode'],
+    ['cfgCoord', 'coordinate'], ['cfgHiSens', 'high_sensitivity']
+  ];
+
   $('btnApply').onclick = function () {
-    var ids = ['cfgEcho', 'cfgWork', 'cfgImu', 'cfgScan', 'cfgCoord', 'cfgHiSens'];
-    post('/api/config', {
-      echo_type: $('cfgEcho').value,
-      work_mode: $('cfgWork').value,
-      imu_freq: $('cfgImu').value,
-      scan_mode: $('cfgScan').value,
-      coordinate: $('cfgCoord').value,
-      high_sensitivity: $('cfgHiSens').value
-    }).then(function () { clearEdited(ids); });
+    var body = {}, ids = [], n = 0;
+    CFG_FIELDS.forEach(function (f) {
+      var el = $(f[0]);
+      if (!el) { return; }
+      ids.push(f[0]);
+      if (el.value !== lastConfig[f[1]]) { body[f[1]] = el.value; n++; }
+    });
+    if (!n) {
+      toast('Nothing changed - the LiDAR is already set that way');
+      clearEdited(ids);
+      return;
+    }
+    post('/api/config', body).then(function () { clearEdited(ids); });
   };
   $('btnApplyRtk').onclick = function () {
     post('/api/config', { rtk_source: $('cfgRtk').value })
