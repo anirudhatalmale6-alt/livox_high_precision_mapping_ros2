@@ -22,6 +22,8 @@ class UsbManager:
         self.device_hint = device_hint      # force a device, e.g. /dev/sda1
         self.simulate = simulate
         self._last_mount_try = -1e9   # rate-limits ensure_mounted()
+        self._cache = None            # see status()
+        self._cache_t = 0.0
         self._sim = {
             'present': True, 'mounted': True, 'label': 'SIM-USB',
             'total_gb': 128.0, 'free_gb': 80.6, 'free_pct': 63,
@@ -29,9 +31,41 @@ class UsbManager:
         }
 
     # ---- status -----------------------------------------------------------
-    def status(self):
+    # Cached, because this is not cheap and it is asked for constantly.
+    #
+    # One status() is seven child processes: findmnt once per system path, then
+    # lsblk. The SSE stream calls it twice a second FOR EVERY OPEN BROWSER, so a
+    # single dashboard tab was forking about fourteen processes a second, and
+    # two tabs twice that - forever, on a board with eight small cores.
+    #
+    # On 20 Aug 2026 the client's unit had to be SIGKILLed with THIRTEEN
+    # processes named mapper_web still alive, nine of them with consecutive
+    # PIDs. A child keeps its parent's name until execve() completes, so a fork
+    # storm on a loaded machine shows up as exactly that. Whether or not it is
+    # the whole story, spawning fourteen processes a second to answer "is the
+    # USB stick still there" is indefensible on its own.
+    #
+    # A USB stick does not appear and disappear inside two seconds, and every
+    # action that DOES change it (mount, eject, format) clears the cache itself.
+    CACHE_S = 2.0
+
+    def status(self, force=False):
         if self.simulate:
             return dict(self._sim)
+        now = time.time()
+        if not force and self._cache is not None and \
+                (now - self._cache_t) < self.CACHE_S:
+            return dict(self._cache)
+        info = self._status_uncached()
+        self._cache = dict(info)
+        self._cache_t = now
+        return info
+
+    def invalidate(self):
+        """Force the next status() to go and look properly."""
+        self._cache = None
+
+    def _status_uncached(self):
         f = self._find()
         info = {'present': False, 'mounted': False, 'label': '-',
                 'total_gb': 0.0, 'free_gb': 0.0, 'free_pct': 0,
@@ -100,6 +134,7 @@ class UsbManager:
         if self.simulate:
             self._sim['mounted'] = True
             return True, 'mounted (sim)'
+        self.invalidate()      # this changes the answer; do not serve a stale one
         f = self._find()
         dev = self.device_hint or (f['device'] if f else '')
         if not dev:
@@ -120,6 +155,7 @@ class UsbManager:
         if self.simulate:
             self._sim['mounted'] = False
             return True, 'ejected (sim)'
+        self.invalidate()
         self._run(['sync'])
         f = self._find()
         dev = self.device_hint or (f['device'] if f else '')
@@ -140,6 +176,7 @@ class UsbManager:
             self._sim['free_gb'] = self._sim['total_gb']
             self._sim['free_pct'] = 100
             return True, 'formatted (sim)'
+        self.invalidate()
         f = self._find()
         dev = self.device_hint or (f['device'] if f else '')
         if not dev:
