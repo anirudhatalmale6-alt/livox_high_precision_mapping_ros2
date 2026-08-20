@@ -391,6 +391,11 @@ class Handler(BaseHTTPRequestHandler):
     def _system(self, action):
         if self.app.opts.simulate:
             return True, action + ' (sim)'
+        # Park the laser before the machine goes away. Not on a reboot: the
+        # unit is back in half a minute and the driver brings the LiDAR up
+        # again itself, so parking would only risk it coming back asleep.
+        if action != 'reboot':
+            self.app.ctl.park_lidar()
         from .power import power_off
         return power_off(reboot=(action == 'reboot'))
 

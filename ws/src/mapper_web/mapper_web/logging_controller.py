@@ -86,6 +86,31 @@ class LoggingController:
         self.s.add_event('Waking the LiDAR from %s' % mode)
         return ok
 
+    # How long to let a park command reach the device before the machine that
+    # sent it goes away. The ack in the client's logs comes back in 1-4 s.
+    PARK_SETTLE_S = 4.0
+
+    def park_lidar(self):
+        """Spin the laser down before the Pi shuts down.
+
+        The Avia has its OWN power supply. Shutting the Pi down does not switch
+        the LiDAR off - it only removes the one thing that was talking to it,
+        leaving the laser spinning unattended with nothing able to stop it.
+        Client's request, and plainly right.
+
+        Deliberately blocks for a few seconds afterwards: the command has to
+        reach the device before the machine issuing it disappears. A shutdown
+        the operator has already confirmed can afford four seconds.
+        """
+        if self.simulate:
+            return True
+        ok, _msg = self.apply_lidar_config({'work_mode': 'Power Saving'})
+        self.s.add_event('LiDAR parked for shutdown' if ok
+                         else 'Could not park the LiDAR - shutting down anyway')
+        if ok:
+            time.sleep(self.PARK_SETTLE_S)
+        return ok
+
     def _start_sequence(self):
         # Wait for the sensors to be alive (and, if required, an RTK fix) before
         # we commit to recording, so we never save a bad run.

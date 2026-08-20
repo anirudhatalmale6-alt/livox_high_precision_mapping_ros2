@@ -93,6 +93,13 @@ class PushButton:
         # < LOG_MIN: ignored as an accidental tap
 
     def _shutdown(self):
+        # Park the laser first - the same as the dashboard's SHUTDOWN button.
+        # This is the path taken on a unit with no screen attached, so it is
+        # the one that most needs to leave the hardware tidy.
+        try:
+            self.ctl.park_lidar()
+        except Exception:
+            pass          # never let this stop the unit powering down
         from .power import power_off
         power_off(reboot=False)
 

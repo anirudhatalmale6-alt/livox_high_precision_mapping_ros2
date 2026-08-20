@@ -200,7 +200,9 @@
     confirmPost('/api/system/restart', 'Restart the Pi now?');
   };
   $('btnShutdown').onclick = function () {
-    confirmPost('/api/system/shutdown', 'Shut the Pi down now?');
+    confirmPost('/api/system/shutdown',
+      'Shut down now? The laser is parked in Power Saving first, then the Pi ' +
+      'powers off. Takes a few seconds.');
   };
   // Mark a dropdown as user-edited the moment they change it, so the live
   // refresh stops overwriting it until they apply.
