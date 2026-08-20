@@ -30,6 +30,26 @@
     if (window.confirm(question)) { post(path, body); }
   }
 
+  // For actions that deliberately take the server down underneath themselves.
+  //
+  // RESTART SENSORS stops the service this page is served by, so the reply
+  // usually never arrives and fetch reports "TypeError: Failed to fetch". The
+  // restart worked perfectly - but the screen said it failed, which is exactly
+  // the sort of lie this dashboard has spent all week getting rid of. Say what
+  // is about to happen up front, and treat a dropped connection as the
+  // expected outcome rather than an error.
+  function postExpectingDrop(path, question, notice) {
+    if (!window.confirm(question)) { return; }
+    toast(notice);
+    fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    }).then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.message) { toast(j.message, !j.ok); } })
+      .catch(function () { /* expected: the server is going away */ });
+  }
+
   // ---- render a status snapshot ----------------------------------------
   function render(s) {
     // connection
@@ -225,9 +245,11 @@
       .then(function () { clearEdited(['cfgRtk']); });
   };
   $('btnRestartSensors').onclick = function () {
-    confirmPost('/api/system/restart-sensors',
+    postExpectingDrop('/api/system/restart-sensors',
       'Restart the LiDAR and GPS drivers? The dashboard will drop for about ' +
-      '30 seconds and come back on its own. Nothing recorded is affected.');
+      '30 seconds and come back on its own. Nothing recorded is affected.',
+      'Restarting the drivers - this page will go quiet for about 30 s, then ' +
+      'reconnect by itself.');
   };
   $('btnUsbAttach').onclick = function () { post('/api/usb/attach'); };
   $('btnUsbDetach').onclick = function () {
