@@ -152,6 +152,20 @@ public:
     autosave_sec_ = declare_parameter<double>("autosave_sec", 15.0);
     last_save_ = std::chrono::steady_clock::now();
 
+    // Drop returns closer than this (metres, sensor frame). 0 disables.
+    //
+    // When a beam hits nothing within range - open sky, a window, a dark
+    // surface - the Avia does not omit the point, it reports (0,0,0). Run that
+    // through the pose transform and it lands ON the scanner position, so an
+    // outdoor scan grows a dense fake lump exactly where the operator is
+    // standing. A capture from 19 Aug 2026 came back 34% no-returns: a third of
+    // the file, and a blob dense enough to swamp the real geometry near the
+    // origin in CloudCompare.
+    //
+    // 0.5 m is well inside the Avia's specified 1 m minimum detection range, so
+    // nothing measurable is lost - anything below it was never a real surface.
+    min_range_ = declare_parameter<double>("min_range", 0.5);
+
     // Put the LiDAR + IMU (computer-clock stamped by the Livox driver) onto the
     // same satellite clock as the GPS. When true, we add the (satellite -
     // computer) offset published by the UM982 driver on /gnss_inertial/time_offset
@@ -284,6 +298,18 @@ public:
     writeGeoRef(file);
     RCLCPP_INFO(get_logger(), "Saved %zu points to %s",
                 accumulated_->size(), file.c_str());
+    if (dropped_near_ > 0)
+    {
+      // Worth printing rather than hiding: a high share means a lot of the
+      // field of view saw nothing (scanning open sky, or a covered lens), which
+      // is a real thing to know about a capture.
+      const size_t total = accumulated_->size() + dropped_near_;
+      RCLCPP_INFO(get_logger(),
+                  "Dropped %zu no-return points closer than %.2f m (%.1f%% of "
+                  "the raw scan)", dropped_near_, min_range_,
+                  100.0 * static_cast<double>(dropped_near_) /
+                    static_cast<double>(total ? total : 1));
+    }
   }
 
   // Write a small human-readable sidecar (<file>.geo.txt) recording where the
@@ -557,6 +583,24 @@ private:
 
     for (size_t i = 0; i < laserCloudIn.points.size(); ++i)
     {
+      // Tested in the SENSOR frame, before any pose is applied - that is where
+      // a no-return is exactly (0,0,0) and the test cannot be confused by where
+      // the scanner happens to be. lidar_t still has to advance: it is the
+      // per-point clock that picks the IMU/RTK pair for the NEXT point.
+      if (min_range_ > 0.0)
+      {
+        const auto & raw = laserCloudIn.points[i];
+        const double r2 = static_cast<double>(raw.x) * raw.x +
+                          static_cast<double>(raw.y) * raw.y +
+                          static_cast<double>(raw.z) * raw.z;
+        if (r2 < min_range_ * min_range_)
+        {
+          dropped_near_++;
+          lidar_t += dt;
+          continue;
+        }
+      }
+
       if (lidar_t > imu_back_t && num_imu + 2 < imu_datas_.size())
       {
         num_imu++;
@@ -701,6 +745,8 @@ private:
   double lidar_delta_time_ = 0.01;
   std::string map_file_path_;
   bool save_pcd_ = true;
+  double min_range_ = 0.5;
+  size_t dropped_near_ = 0;
   double autosave_sec_ = 15.0;
   bool use_gps_time_ = false;
   Eigen::Matrix4d rtk2lidar_ = Eigen::Matrix4d::Identity();

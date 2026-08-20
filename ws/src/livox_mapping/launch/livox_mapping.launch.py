@@ -24,6 +24,11 @@ def generate_launch_description():
         'autosave_sec', default_value='15.0',
         description='Flush the map to its .pcd every N seconds while running so a '
                     'file always exists even after a hard kill. 0 disables.')
+    min_range_arg = DeclareLaunchArgument(
+        'min_range', default_value='0.5',
+        description='Drop returns closer than this (m). The Avia reports a '
+                    'no-return as (0,0,0), which the pose transform then places '
+                    'on the scanner itself. 0 disables the filter.')
     gps_time_arg = DeclareLaunchArgument(
         'use_gps_time', default_value='false',
         description='Shift LiDAR/IMU stamps onto satellite time using the offset '
@@ -43,6 +48,8 @@ def generate_launch_description():
                 LaunchConfiguration('autosave_sec'), value_type=float),
             'use_gps_time': ParameterValue(
                 LaunchConfiguration('use_gps_time'), value_type=bool),
+            'min_range': ParameterValue(
+                LaunchConfiguration('min_range'), value_type=float),
         }],
     )
 
@@ -55,5 +62,5 @@ def generate_launch_description():
     )
 
     return LaunchDescription(
-        [rviz_arg, map_path_arg, delta_arg, autosave_arg, gps_time_arg,
-         mapping_node, rviz_node])
+        [rviz_arg, map_path_arg, delta_arg, autosave_arg, min_range_arg,
+         gps_time_arg, mapping_node, rviz_node])
