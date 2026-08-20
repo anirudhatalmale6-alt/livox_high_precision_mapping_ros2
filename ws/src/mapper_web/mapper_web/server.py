@@ -89,6 +89,17 @@ class App:
         self.monitor.start()
         self._restore_lidar_config()
 
+    # How long to watch the LiDAR after a restore before calling it survivable.
+    # The failure we are guarding against takes the driver down within seconds
+    # of the command, so this does not need to be long - and it must NOT be, or
+    # an ordinary `systemctl restart` in the middle of the window would be
+    # counted as a crash and cost the operator their settings.
+    RESTORE_PROOF_S = 15.0
+
+    # The setting the Livox driver's own config file uses, and the only value
+    # we know cannot take the driver down with it.
+    SAFE_ECHO = 'Single - First Return'
+
     def _restore_lidar_config(self):
         """Push the saved LiDAR settings back to the device once it is up.
 
@@ -98,10 +109,42 @@ class App:
         this the client's "Single - Strongest Return", which visibly produced
         his best scan, would silently be first-return again after a reboot.
 
+        GUARDED, because restoring a setting automatically is only safe if that
+        setting is safe. The client is currently able to kill the Livox driver
+        by switching return mode. Saved and replayed at every boot, that turns a
+        thing he did once into a thing the unit does to itself forever - a
+        crash loop that gets worse the more reliable the restore is.
+
+        So: a marker is written before the command goes out and removed once the
+        unit has stayed up for RESTORE_PROOF_S afterwards. Finding the marker
+        still there at startup means the last restore did not survive, and we
+        do not repeat it.
+
         Runs in the background: the control link needs the driver to be up, and
         nothing here is allowed to delay the dashboard coming online.
         """
         if self.opts.simulate:
+            return
+
+        marker = os.environ.get(
+            'MAPPER_RESTORE_MARKER', '/var/lib/mapper/restore_in_progress.json')
+        strikes = self._read_marker(marker)
+
+        if strikes:
+            # Last boot's restore did not survive. Do not send it again.
+            self._clear_marker(marker)
+            if strikes >= 2:
+                # Reverting the echo type alone did not help, so something else
+                # in there is doing it. Drop the lot back to defaults.
+                self.state.merge('config', **MapperState().get('config'))
+                self.state.save_config()
+                self.state.add_event('LiDAR settings reset - restore kept failing')
+            else:
+                bad = self.state.get('config').get('echo_type')
+                self.state.merge('config', echo_type=self.SAFE_ECHO)
+                self.state.save_config()
+                self.state.add_event('Reverted echo type - %s crashed the LiDAR'
+                                     % bad)
             return
 
         def worker():
@@ -114,14 +157,58 @@ class App:
                 # not up yet ("saved - applies once ... running"), which is the
                 # honest answer to a person pressing APPLY but would end this
                 # retry loop before anything reached the device.
+                self._write_marker(marker, strikes + 1)
                 ok, msg = self.monitor.send_command(cfg)
                 if ok:
                     self.state.add_event('LiDAR settings restored')
+                    # Judge the restore on the LiDAR itself, not on the clock.
+                    # "Did the unit stay up" would also be satisfied by the
+                    # operator restarting the service for their own reasons,
+                    # and would then cost them their settings for nothing.
+                    # "Is the LiDAR still streaming" measures the actual thing.
+                    time.sleep(self.RESTORE_PROOF_S)
+                    if self.state.get('lidar')['ok']:
+                        self._clear_marker(marker)
+                    else:
+                        self.state.add_event(
+                            'LiDAR stopped right after applying settings')
                     return
+                self._clear_marker(marker)
                 time.sleep(3.0)
             self.state.add_event('Could not restore LiDAR settings')
 
         threading.Thread(target=worker, daemon=True).start()
+
+    # ---- restore marker ---------------------------------------------------
+    # Deliberately its own small file rather than a key in the settings file:
+    # it must be possible to clear the marker without rewriting the settings,
+    # and a half-written settings file must never be able to lose them.
+    @staticmethod
+    def _read_marker(path):
+        try:
+            with open(path) as f:
+                d = json.load(f)
+            return int(d.get('strikes', 0)) if isinstance(d, dict) else 0
+        except (OSError, ValueError, TypeError):
+            return 0
+
+    @staticmethod
+    def _write_marker(path, strikes):
+        try:
+            d = os.path.dirname(path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            with open(path, 'w') as f:
+                json.dump({'strikes': int(strikes), 't': time.time()}, f)
+        except (OSError, ValueError, TypeError):
+            pass
+
+    @staticmethod
+    def _clear_marker(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
     def refresh_usb(self):
         s = self.usb.status()
