@@ -247,6 +247,18 @@ class StatusMonitor:
         if pub is None:
             return False, ('LiDAR control link not up yet - is the Livox '
                            'driver running?')
+        # Publishing to a topic nobody subscribes to SUCCEEDS. The message is
+        # simply dropped, and we would go on to report "sent to LiDAR" - which
+        # is how the client came to be clicking APPLY, being told it had been
+        # sent, and watching nothing happen. Say what is actually true.
+        try:
+            listeners = pub.get_subscription_count()
+        except Exception:
+            listeners = 1        # can't tell - don't invent a failure
+        if not listeners:
+            return False, ('the LiDAR driver is not listening on the control '
+                           'link - nothing was sent. Check the Livox driver is '
+                           'running (systemctl status mapper-field)')
         try:
             msg = String()
             msg.data = json.dumps(cfg)

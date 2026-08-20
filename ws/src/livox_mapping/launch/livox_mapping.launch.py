@@ -44,6 +44,20 @@ def generate_launch_description():
         executable='livox_mapping_node',
         name='livox_mapping',
         output='screen',
+        # Give the map time to be written before anything kills this.
+        #
+        # ros2 launch defaults to SIGINT, then SIGTERM 5 s later, then SIGKILL
+        # 10 s after that. Saving the cloud on shutdown means writing tens of
+        # megabytes to a USB stick, which on this hardware takes longer than
+        # that - so the client's runs were repeatedly ending in
+        #   process[livox_mapping_node-1] failed to terminate '10.0' seconds
+        #   after receiving 'SIGTERM', escalating to 'SIGKILL'
+        #   process has died [pid ..., exit code -9]
+        # A SIGKILL mid-write is the one thing the atomic .tmp-then-rename in
+        # saveMap() is there to survive, so no file was corrupted - but the
+        # final save was lost and the run fell back to the last autosave.
+        sigterm_timeout='45',
+        sigkill_timeout='45',
         parameters=[{
             'lidar_delta_time': ParameterValue(
                 LaunchConfiguration('lidar_delta_time'), value_type=float),

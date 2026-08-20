@@ -163,7 +163,13 @@ class LoggingController:
         if self._proc and self._proc != 'SIM':
             try:
                 os.killpg(os.getpgid(self._proc.pid), signal.SIGINT)
-                self._proc.wait(timeout=30)
+                # Must outlast ros2 launch's own escalation inside this group
+                # (SIGINT, then SIGTERM after sigterm_timeout, then SIGKILL
+                # after sigkill_timeout - 45 s each in mapping.launch.py).
+                # Killing the group at 30 s would destroy the very save those
+                # timeouts exist to allow, which is the failure this pair of
+                # numbers was raised to fix.
+                self._proc.wait(timeout=100)
             except (ProcessLookupError, subprocess.TimeoutExpired):
                 try:
                     os.killpg(os.getpgid(self._proc.pid), signal.SIGKILL)
