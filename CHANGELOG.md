@@ -667,6 +667,52 @@ against an empty list, a full list, and a hostile filename.
 
 ---
 
+## 28. A third of an outdoor scan was not data
+
+**Symptom:** the 19 Aug 21:42 capture was 26.9 MB for a room that needed 16.9 MB,
+and 624,200 of its 1,679,199 points sat inside an 8 x 8 x 14 cm box at the
+scanner position.
+
+When a beam hits nothing within range — open sky, a window, a dark surface — the
+Avia does **not** omit the point. It reports it as `(0,0,0)` in the sensor frame.
+The mapper then applies the current pose to it, so every one of those zeros lands
+exactly where the scanner was standing, and an outdoor scan grows a dense fake
+lump at the origin.
+
+How much it costs depends entirely on how much sky is in the field of view:
+
+| capture | points within 15 cm of the origin |
+|---|---|
+| 27 Jul, indoors | 0.9 % |
+| 19 Aug 21:55, indoors | 1.5 % |
+| **19 Aug 21:42, outdoors at night** | **33.7 %** |
+
+Indoors it is invisible. Outdoors it is a third of the file.
+
+**Fix:** a `min_range` parameter (default `0.5`, `0` disables) applied in the
+*sensor* frame, before any pose is applied — that is the one place where a
+no-return is exactly zero and the test cannot be confused by where the scanner
+happens to be. The Avia's specified minimum detection range is 1 m, so 0.5 m
+cannot discard a real measurement: anything below it was never a surface.
+
+One subtlety worth recording. The dropped point still has to advance `lidar_t`
+before `continue`, because `lidar_t` is the per-point clock that selects the
+IMU/RTK pair for the *next* point. Skipping the increment would quietly shift
+the interpolation for every remaining point in the frame.
+
+Verified by applying the same rule offline to the client's own file: 624,200
+points removed, the room pixel-identical, 26.9 MB down to 16.9 MB. The count of
+dropped points and its share of the raw scan are now logged at every save — a
+high share is a real thing to know about a capture (a lot of sky, or a covered
+lens).
+
+`scripts/scan_stats.py` is the tool that found it: point count, implied duration
+(points / 240 000 for the Avia at single return), bounding box, a stationary-
+versus-moving test, and a plane-fit RMS smear proxy on the densest horizontal
+band.
+
+---
+
 ## Where the detail lives
 
 - Per-change history with reasons: `git log` in this repo (each commit message
