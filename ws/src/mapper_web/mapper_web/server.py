@@ -16,6 +16,7 @@
 import argparse
 import json
 import os
+import signal
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -339,6 +340,26 @@ def main(argv=None):
     srv = ThreadingHTTPServer((opts.host, opts.port), Handler)
     mode = 'SIMULATE' if opts.simulate else 'LIVE'
     print('Mapper dashboard [{}] on http://{}:{}'.format(mode, opts.host, opts.port))
+
+    # Come down on SIGTERM as well as SIGINT.
+    #
+    # serve_forever() only ever unwound on KeyboardInterrupt, so a plain
+    # `systemctl stop` left this process sitting there until systemd lost
+    # patience and SIGKILLed it 90 seconds later - and a stop that does not
+    # finish is how two dashboards ended up alive at the same time, with the
+    # older one still holding the GPS serial port.
+    def _shutdown(signum, frame):
+        # shutdown() must not be called from inside serve_forever()'s own
+        # thread or it deadlocks; a handler runs in the main thread, which IS
+        # that thread, so hand it to a helper.
+        threading.Thread(target=srv.shutdown, daemon=True).start()
+
+    for _sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(_sig, _shutdown)
+        except (ValueError, OSError):
+            pass          # not the main thread - fall back to the old behaviour
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
@@ -346,6 +367,7 @@ def main(argv=None):
     finally:
         app.led.close()
         app.monitor.stop()
+        srv.server_close()
 
 
 if __name__ == '__main__':

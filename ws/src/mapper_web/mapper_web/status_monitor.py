@@ -113,7 +113,19 @@ class StatusMonitor:
 
     # ---- real ROS2 path ---------------------------------------------------
     def _ros_loop(self):
-        rclpy.init()
+        # Do NOT let rclpy install signal handlers.
+        #
+        # rcl installs its own SIGINT (and on some builds SIGTERM) handler that
+        # sets a shutdown flag rather than ending the process. The dashboard's
+        # main thread is blocked in serve_forever(), which only unwinds on a
+        # KeyboardInterrupt that then never comes - so the process sits there
+        # until systemd gives up and SIGKILLs it. server.py installs handlers
+        # that actually stop the HTTP server; these must not be replaced.
+        try:
+            from rclpy.signals import SignalHandlerOptions
+            rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+        except (ImportError, TypeError, AttributeError):
+            rclpy.init()      # older rclpy - keep the previous behaviour
         node = Node('mapper_web_status')
         lidar, imu = _RateTracker(), _RateTracker()
         gnss_state = {'fix': 'No fix', 'sats': 0, 't': 0.0}

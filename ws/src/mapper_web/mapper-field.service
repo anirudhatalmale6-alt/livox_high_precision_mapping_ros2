@@ -35,5 +35,25 @@ ExecStart=/bin/bash -lc 'source /opt/ros/humble/setup.bash && \
 Restart=on-failure
 RestartSec=5
 
+# Stop the unit the way ros2 launch actually expects to be stopped.
+#
+# systemd's default stop signal is SIGTERM. `ros2 launch` drives its graceful
+# shutdown from SIGINT - that is what makes it tell each node to shut down,
+# which is also how the mapping node knows to write its .pcd. Sent SIGTERM
+# instead, the tree does not unwind: on 20 Aug 2026 a stop took the full
+# 90-second default timeout and ended in
+#   mapper-field.service: State 'final-sigterm' timed out. Killing.
+#   Killing process 2150 (mapper_web) with signal SIGKILL
+#   Killing process 11014 (mapper_web) with signal SIGKILL
+# - note TWO dashboards alive at once, which is what a stop that does not
+# finish leaves behind. A leftover process still holding /dev/gps is enough to
+# stop the next one working: two readers on one serial port each take a share
+# of the bytes, so neither sees a whole NMEA sentence and the receiver looks
+# silent while being perfectly healthy.
+KillSignal=SIGINT
+# 30 s is generous for a clean unwind and still leaves a wedged unit recoverable
+# in well under a minute, rather than the 90 s default.
+TimeoutStopSec=30
+
 [Install]
 WantedBy=multi-user.target

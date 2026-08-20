@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -290,18 +291,74 @@ private:
         configureTimeSync();
       }
 
+      // "Connected" only means the file opened. Until a sentence actually
+      // parses we know nothing, and the node used to say nothing either - it
+      // logged "Connected", then fell silent forever while the dashboard read
+      // "Not connected" with no clue why.
+      //
+      // The case worth naming is a second reader on the same port. Linux lets
+      // two processes hold one tty at once and gives each a share of the bytes,
+      // so neither ever sees a whole sentence: a healthy receiver, a valid
+      // port, and no data. That is what a stop which did not finish leaves
+      // behind, and it is invisible from here without being told.
+      auto opened_at = std::chrono::steady_clock::now();
+      auto last_good = opened_at;
+      auto last_moan = opened_at;
+      bool ever_good = false;
+      size_t lines_seen = 0;
+
       std::string line;
       while (running_ && rclcpp::ok() && serial.isOpen())
       {
-        if (!serial.readLine(line))
+        if (serial.readLine(line) && !line.empty())
         {
-          continue;  // timeout, keep going
+          ++lines_seen;
+          if (!um982::messageType(line).empty())
+          {
+            last_good = std::chrono::steady_clock::now();
+            if (!ever_good)
+            {
+              ever_good = true;
+              RCLCPP_INFO(get_logger(), "Receiving GNSS sentences from %s.",
+                          device.c_str());
+            }
+          }
+          handleSentence(line);
         }
-        if (line.empty())
+
+        const auto now_t = std::chrono::steady_clock::now();
+        const double quiet =
+          std::chrono::duration<double>(now_t - last_good).count();
+        const double since_moan =
+          std::chrono::duration<double>(now_t - last_moan).count();
+        if (quiet > 10.0 && since_moan > 30.0)
         {
-          continue;
+          last_moan = now_t;
+          if (lines_seen == 0)
+          {
+            RCLCPP_ERROR(get_logger(),
+                         "%s opened but NOTHING has arrived in %.0fs. Check the "
+                         "receiver has power and that its TX line and ground "
+                         "reach the adapter.", device.c_str(), quiet);
+          }
+          else if (!ever_good)
+          {
+            RCLCPP_ERROR(get_logger(),
+                         "%s is sending data but none of it parses as GNSS "
+                         "(%zu lines in %.0fs). Either the baud rate is wrong - "
+                         "this driver is set to %d - or another process has the "
+                         "same port open and you are each getting half the "
+                         "bytes. Check with: sudo fuser -v %s",
+                         device.c_str(), lines_seen, quiet, baud_,
+                         device.c_str());
+          }
+          else
+          {
+            RCLCPP_WARN(get_logger(),
+                        "No GNSS sentence from %s for %.0fs - the receiver has "
+                        "gone quiet.", device.c_str(), quiet);
+          }
         }
-        handleSentence(line);
       }
     }
   }
