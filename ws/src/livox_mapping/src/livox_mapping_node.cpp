@@ -16,6 +16,7 @@
 // sensor sources differ.
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <ctime>
 #include <fstream>
@@ -165,6 +166,18 @@ public:
     // 0.5 m is well inside the Avia's specified 1 m minimum detection range, so
     // nothing measurable is lost - anything below it was never a real surface.
     min_range_ = declare_parameter<double>("min_range", 0.5);
+
+    // Hard ceiling on the accumulated map, in points. 0 disables.
+    //
+    // The map only ever grows, and a pcl::PointXYZRGB is 32 bytes. At the
+    // Avia's 240 000 points/s that is 7.7 MB/s - about 460 MB per minute - so a
+    // 6 GB board runs out in roughly ten minutes of recording. Dual return
+    // doubles the rate and triple return triples it, which is why a long run,
+    // or any run after switching return mode, can end with the process being
+    // killed rather than stopping. Being OOM-killed loses everything since the
+    // last autosave; stopping cleanly keeps a complete file.
+    const int64_t cap = declare_parameter<int64_t>("max_points", 60000000);
+    max_points_ = (cap > 0) ? static_cast<size_t>(cap) : 0;
 
     // Put the LiDAR + IMU (computer-clock stamped by the Livox driver) onto the
     // same satellite clock as the GPS. When true, we add the (satellite -
@@ -736,7 +749,28 @@ private:
     output.header.stamp = now();
     pub_cloud_->publish(output);
 
-    *accumulated_ += *colour;
+    if (max_points_ && accumulated_->size() + colour->size() > max_points_)
+    {
+      // Save what we have, say so once, and keep the node alive - the live
+      // /pub_pointcloud2 stream above is unaffected, so RViz keeps working and
+      // STOP still writes the file.
+      if (!capped_)
+      {
+        capped_ = true;
+        saveMap();
+        RCLCPP_ERROR(get_logger(),
+                     "Map has reached the %zu point ceiling (about %.1f GB) and "
+                     "has been saved. Still recording live, but no longer "
+                     "adding to the saved map - stop and start a new run. Raise "
+                     "max_points if this machine has the memory for it.",
+                     max_points_,
+                     static_cast<double>(max_points_) * 32.0 / 1e9);
+      }
+    }
+    else
+    {
+      *accumulated_ += *colour;
+    }
 
     maybeAutosave();
   }
@@ -747,6 +781,8 @@ private:
   bool save_pcd_ = true;
   double min_range_ = 0.5;
   size_t dropped_near_ = 0;
+  size_t max_points_ = 60000000;
+  bool capped_ = false;
   double autosave_sec_ = 15.0;
   bool use_gps_time_ = false;
   Eigen::Matrix4d rtk2lidar_ = Eigen::Matrix4d::Identity();

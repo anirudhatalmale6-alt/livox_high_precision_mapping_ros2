@@ -29,6 +29,11 @@ def generate_launch_description():
         description='Drop returns closer than this (m). The Avia reports a '
                     'no-return as (0,0,0), which the pose transform then places '
                     'on the scanner itself. 0 disables the filter.')
+    max_points_arg = DeclareLaunchArgument(
+        'max_points', default_value='60000000',
+        description='Ceiling on the accumulated map (points). The map only '
+                    'grows; at 32 bytes a point the Avia fills 6 GB in about '
+                    'ten minutes, faster in dual/triple return. 0 disables.')
     gps_time_arg = DeclareLaunchArgument(
         'use_gps_time', default_value='false',
         description='Shift LiDAR/IMU stamps onto satellite time using the offset '
@@ -50,6 +55,8 @@ def generate_launch_description():
                 LaunchConfiguration('use_gps_time'), value_type=bool),
             'min_range': ParameterValue(
                 LaunchConfiguration('min_range'), value_type=float),
+            'max_points': ParameterValue(
+                LaunchConfiguration('max_points'), value_type=int),
         }],
     )
 
@@ -63,4 +70,4 @@ def generate_launch_description():
 
     return LaunchDescription(
         [rviz_arg, map_path_arg, delta_arg, autosave_arg, min_range_arg,
-         gps_time_arg, mapping_node, rviz_node])
+         max_points_arg, gps_time_arg, mapping_node, rviz_node])

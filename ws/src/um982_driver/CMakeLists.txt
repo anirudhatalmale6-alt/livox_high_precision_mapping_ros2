@@ -46,6 +46,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_mavlink_rtcm test/test_mavlink_rtcm.cpp)
   target_include_directories(test_mavlink_rtcm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+  # Port auto-detection. A plain main() rather than gtest: it drives real ptys
+  # through the actual termios code, so it needs -lutil and its own threads.
+  add_executable(test_port_detect test/test_port_detect.cpp)
+  target_include_directories(test_port_detect PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(test_port_detect util pthread)
+  add_test(NAME test_port_detect COMMAND test_port_detect)
 endif()
 
 ament_package()

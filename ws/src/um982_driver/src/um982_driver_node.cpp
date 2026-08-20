@@ -7,6 +7,11 @@
 //
 // The NavSatFix topic is the drop-in replacement for the position stream that
 // the original APX-15 driver produced, so the mapping node needs no change.
+#include <glob.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <unistd.h>
+
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -14,6 +19,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
@@ -38,6 +44,15 @@ public:
   {
     port_ = declare_parameter<std::string>("port", "/dev/ttyUSB0");
     baud_ = declare_parameter<int>("baud", 230400);
+    // If the configured port cannot be opened, look for the receiver on the
+    // other serial devices instead of retrying a name that is not there.
+    //
+    // The field unit addresses the UM982 as /dev/gps, a udev symlink. When that
+    // symlink is missing - the rule did not load, the adapter enumerated with a
+    // different id, the unit was reflashed - the driver retried the same dead
+    // name once a second forever and the dashboard showed "Not connected", with
+    // nothing to distinguish it from a receiver that had actually failed.
+    auto_detect_port_ = declare_parameter<bool>("auto_detect_port", true);
     frame_id_ = declare_parameter<std::string>("frame_id", "gnss");
     publish_heading_ = declare_parameter<bool>("publish_heading", true);
     // On connect, tell the UM982 to STREAM its dual-antenna heading message.
@@ -111,15 +126,153 @@ public:
   }
 
 private:
+  // ---- port resolution --------------------------------------------------
+  //
+  // Always prefer the configured port. Only when it cannot be opened do we go
+  // looking, and then we do not guess from the device name: a CH340 adapter
+  // looks identical whether a GNSS receiver, an IMU or nothing at all is wired
+  // to the other end. We open each candidate and listen for the receiver's own
+  // sentences. That is the only test that cannot be fooled by enumeration order.
+
+  static std::string realPath(const std::string & p)
+  {
+    char buf[PATH_MAX];
+    const char * r = ::realpath(p.c_str(), buf);
+    return r ? std::string(r) : p;
+  }
+
+  std::vector<std::string> candidatePorts() const
+  {
+    std::vector<std::string> out;
+    glob_t g{};
+    if (::glob("/dev/ttyUSB*", 0, nullptr, &g) == 0)
+    {
+      for (size_t i = 0; i < g.gl_pathc; ++i) { out.emplace_back(g.gl_pathv[i]); }
+    }
+    ::globfree(&g);
+    glob_t g2{};
+    if (::glob("/dev/ttyACM*", 0, nullptr, &g2) == 0)
+    {
+      for (size_t i = 0; i < g2.gl_pathc; ++i) { out.emplace_back(g2.gl_pathv[i]); }
+    }
+    ::globfree(&g2);
+
+    // Never steal a port that belongs to another device on this unit. Compared
+    // by resolved path, because these are symlinks and /dev/rtcm and
+    // /dev/ttyUSB1 can be the same thing.
+    std::vector<std::string> blocked;
+    for (const std::string & p : {rtcm_serial_port_, mavlink_serial_port_,
+                                  std::string("/dev/imu")})
+    {
+      if (!p.empty()) { blocked.push_back(realPath(p)); }
+    }
+    std::vector<std::string> keep;
+    for (const std::string & c : out)
+    {
+      const std::string rc = realPath(c);
+      bool skip = false;
+      for (const std::string & b : blocked)
+      {
+        if (rc == b) { skip = true; break; }
+      }
+      if (!skip) { keep.push_back(c); }
+    }
+    return keep;
+  }
+
+  // Open `dev` and listen briefly for anything that identifies a UM982: NMEA
+  // ($G..GGA / RMC / GSV) or a Unicore '#' response.
+  bool speaksGnss(const std::string & dev)
+  {
+    um982::SerialPort probe;
+    try
+    {
+      probe.open(dev, baud_);
+    }
+    catch (const std::exception &)
+    {
+      return false;
+    }
+    // readLine() has a 0.5 s timeout, so this bounds the probe at ~3 s per port.
+    //
+    // It must span at least one full output interval of the receiver, because
+    // open() ends with tcflush(TCIFLUSH) and throws away whatever was already
+    // buffered - the probe can only ever see sentences that arrive AFTER it
+    // opens the port. 3 s covers a receiver streaming as slowly as 1 Hz.
+    for (int i = 0; i < 6; ++i)
+    {
+      std::string line;
+      if (!probe.readLine(line) || line.empty())
+      {
+        continue;
+      }
+      if (line[0] == '#')
+      {
+        return true;
+      }
+      if (line[0] == '$' &&
+          (line.find("GGA") != std::string::npos ||
+           line.find("RMC") != std::string::npos ||
+           line.find("GSV") != std::string::npos))
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  std::string resolvePort()
+  {
+    if (::access(port_.c_str(), F_OK) == 0 || !auto_detect_port_)
+    {
+      return port_;
+    }
+    const std::vector<std::string> cands = candidatePorts();
+    if (cands.empty())
+    {
+      // Say so once, then let the normal open() failure do the retrying - this
+      // runs every second and must not fill the journal.
+      if (!warned_no_ports_)
+      {
+        RCLCPP_ERROR(get_logger(),
+                     "%s does not exist and there are no serial ports at all - "
+                     "the USB-serial adapter is not visible to this machine.",
+                     port_.c_str());
+        warned_no_ports_ = true;
+      }
+      return port_;
+    }
+    warned_no_ports_ = false;
+    for (const std::string & c : cands)
+    {
+      if (speaksGnss(c))
+      {
+        RCLCPP_WARN(get_logger(),
+                    "%s is missing, but a GNSS receiver is talking on %s - "
+                    "using that. Re-run scripts/setup_sensor_names.sh to "
+                    "restore the stable name.",
+                    port_.c_str(), c.c_str());
+        return c;
+      }
+    }
+    RCLCPP_ERROR(get_logger(),
+                 "%s is missing and none of the %zu serial port(s) present are "
+                 "sending GNSS data at %d baud.",
+                 port_.c_str(), cands.size(), baud_);
+    return port_;
+  }
+
   void readLoop()
   {
     while (running_ && rclcpp::ok())
     {
       um982::SerialPort serial;
+      const std::string device = resolvePort();
       try
       {
-        serial.open(port_, baud_);
-        RCLCPP_INFO(get_logger(), "Connected to UM982 serial port.");
+        serial.open(device, baud_);
+        RCLCPP_INFO(get_logger(), "Connected to UM982 on %s.", device.c_str());
+        active_port_ = device;
       }
       catch (const std::exception & e)
       {
@@ -529,6 +682,9 @@ private:
   }
 
   std::string port_;
+  bool auto_detect_port_ = true;
+  std::string active_port_;      // what we actually opened
+  bool warned_no_ports_ = false;
   int baud_ = 230400;
   std::string frame_id_;
   bool publish_heading_ = true;
