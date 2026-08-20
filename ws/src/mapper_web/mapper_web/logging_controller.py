@@ -60,19 +60,43 @@ class LoggingController:
             # Phase 1: initial data logging - spin the head up, run checks.
             self.s.update(logging_state=st.INITIAL,
                           log_message='Initial data logging - spinning up + checks')
-            # TODO(next slice): command the LiDAR to Normal (spin up) here via
-            # the Livox control link. Until then work_mode stays 'Unknown'
-            # rather than a faked value.
             if self.led:
                 self.led.set_logging(True)
 
         threading.Thread(target=self._start_sequence, daemon=True).start()
         return True, 'starting'
 
+    # Work modes in which the laser is not running, so no data will ever
+    # arrive however long we wait for it.
+    ASLEEP_MODES = ('Power Saving', 'Standby')
+
+    def _wake_lidar(self):
+        """If the laser is parked, ask for it back. Returns True if we asked.
+
+        The client parks it in Power Saving between scans - a normal thing to
+        do, and it works. But pressing START while it is parked used to sit
+        through the whole 60 s check window waiting for data that could not
+        possibly arrive, and then abort with "LiDAR not ready". Pressing START
+        LOGGING is not an ambiguous request; wake it.
+        """
+        mode = self.s.get('device').get('work_mode', 'Unknown')
+        if mode not in self.ASLEEP_MODES:
+            return False
+        ok, _msg = self.apply_lidar_config({'work_mode': 'Working Normally'})
+        self.s.add_event('Waking the LiDAR from %s' % mode)
+        return ok
+
     def _start_sequence(self):
         # Wait for the sensors to be alive (and, if required, an RTK fix) before
         # we commit to recording, so we never save a bad run.
-        if not self._data_checks():
+        #
+        # A wake takes as long as it takes: the driver only restarts sampling
+        # once the device reports it has REACHED Normal, and the client's log
+        # has that landing anywhere from 16 s to nearly two minutes after the
+        # command. So give it a window that can actually accommodate it rather
+        # than failing a request we just issued ourselves.
+        woke = self._wake_lidar()
+        if not self._data_checks(timeout_s=180 if woke else 60):
             return   # _data_checks handles abort messaging
         if not self._launch():
             return
