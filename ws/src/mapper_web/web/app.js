@@ -92,8 +92,17 @@
     // Whether the LiDAR can still be COMMANDED. Power Saving stops the data on
     // purpose, so a red LiDAR stream row is not necessarily a fault - but a red
     // control row means you cannot tell it to come back, which always is.
-    pill($('stLink'), s.control_link ? 'Reachable' : 'Not reachable',
-         s.control_link ? 'ok' : 'bad');
+    // Three different faults wear one red light unless you separate them.
+    // Driver gone = it crashed. Driver alive but not answering = something in
+    // the ROS layer. Those need opposite investigations, and the operator
+    // should not have to run ps to find out which one they have.
+    var linkTxt = 'Reachable';
+    if (!s.control_link) {
+      linkTxt = s.driver_process === false ? 'Driver not running'
+              : s.driver_process === true ? 'Driver alive, not answering'
+              : 'Not reachable';
+    }
+    pill($('stLink'), linkTxt, s.control_link ? 'ok' : 'bad');
     // Show what the backend actually determined. Overwriting it with a blanket
     // "No fix" hid the difference between a receiver that is searching and one
     // that is not connected at all.

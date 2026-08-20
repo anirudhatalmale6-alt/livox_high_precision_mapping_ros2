@@ -14,6 +14,7 @@
 # Runs rclpy in its own thread. If ROS2 isn't importable (dev box), it falls
 # back to a simulator so the whole service - and the UI - still runs.
 import json
+import os
 import threading
 import time
 from collections import deque
@@ -50,6 +51,39 @@ _UNKNOWN_DEVICE = {
     'voltage': 'Unknown', 'motor': 'Unknown', 'dust': 'Unknown',
     'service_life': 'Unknown',
 }
+
+
+# The driver's process name, and the 15 characters of it the kernel keeps.
+#
+# /proc/<pid>/comm is truncated to 15 chars (TASK_COMM_LEN - 1), so
+# "livox_ros2_driver_node" is stored as "livox_ros2_driv". Comparing against the
+# full name would never match and the dashboard would report the driver missing
+# on a perfectly healthy unit.
+LIVOX_DRIVER_PROC = 'livox_ros2_driver_node'
+
+
+def process_alive(name):
+    """True/False if a process with this name exists, None if we cannot tell.
+
+    Reads /proc directly rather than shelling out to pgrep. This is polled
+    twice a second forever, and the USB panel already taught us what happens
+    when something on that path forks a child every time it is asked.
+    """
+    want = name[:15]
+    try:
+        entries = os.listdir('/proc')
+    except OSError:
+        return None
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open('/proc/' + entry + '/comm') as f:
+                if f.read().strip() == want:
+                    return True
+        except OSError:
+            continue          # it exited between the listing and the open
+    return False
 
 
 def gnss_label(fix, last_msg_t, now, stale_after=3.0):
@@ -213,8 +247,14 @@ class StatusMonitor:
             # the operator's next question is whether they can still command it
             # back. That used to be answerable only by pressing APPLY and
             # reading the error.
+            # Two separate facts, because they call for opposite responses.
+            # A control link that is down with the driver process GONE is a
+            # crash. Down with the process ALIVE is something in the ROS layer.
+            # The client has hit one of these twice and I have had to ask him
+            # to run ps both times; the unit can answer it itself.
             self.s.update(connected=lidar.alive(),
-                          control_link=self.link_up())
+                          control_link=self.link_up(),
+                          driver_process=process_alive(LIVOX_DRIVER_PROC))
         with self._cmd_lock:
             self._cmd_pub = None
         executor.shutdown()
@@ -290,7 +330,8 @@ class StatusMonitor:
 
     # ---- simulator (dev box) ---------------------------------------------
     def _sim_loop(self):
-        self.s.update(connected=True, control_link=True)
+        self.s.update(connected=True, control_link=True,
+                      driver_process=True)
         self.s.merge('lidar', ok=True, rate_hz=10.0)
         self.s.merge('imu', ok=True, rate_hz=200.0)
         self.s.merge('gnss', ok=True, fix='RTK Fixed', sats=28)

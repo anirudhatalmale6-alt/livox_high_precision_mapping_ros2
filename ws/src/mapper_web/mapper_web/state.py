@@ -26,6 +26,10 @@ class MapperState:
             # Power Saving stops the data by design, and the question that
             # then matters is whether it can still be told to come back.
             'control_link': False,
+            # Is the Livox driver PROCESS there at all? None = could not tell.
+            # With control_link, this separates a crashed driver from a live
+            # one that has stopped answering - completely different faults.
+            'driver_process': None,
             'logging_state': IDLE,
             'log_message': 'Idle',       # human line shown under the buttons
             'last_map': None,            # filename of the most recent .pcd
